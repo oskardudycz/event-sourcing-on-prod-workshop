@@ -52,9 +52,11 @@
 
 #### Flow
 
-1. When the user confirms their cart, the system checks if there are enough tickets available at the requested level for each concert in the cart.
-2. If there are enough tickets, the system creates reservations for each concert.
-3. Users can cancel the reservation or let it expire.
+1. When a concert is created, the ConcertCreated event is raised. The ConcertEventHandler listens to this event, creates a ConcertTicketsAvailability aggregate, and initializes it with the available tickets for each level.
+2. When ticket levels are updated for a concert, the TicketLevelsUpdated event is raised. The ConcertEventHandler listens to this event, loads the ConcertTicketsAvailability aggregate, and updates the available tickets accordingly.
+3. When a concert is canceled, the ConcertCancelled event is raised. The ConcertEventHandler listens to this event, loads the ConcertTicketsAvailability aggregate, and updates the available tickets to zero.
+4. When the user confirms their cart, the system the ReserveTickets command is sent for each concert in the cart. The reservation command handler checks if there are enough available tickets for each level in the ConcertTicketsAvailability aggregate, updates the available tickets accordingly, and creates a new Reservation aggregate.
+5. The reservation can be canceled or expired according to the business rules and invariants mentioned above. The Reservation aggregate is updated accordingly.
 
 - **Business rules:**
   - Ensure tickets are available before creating a reservation.
@@ -62,9 +64,21 @@
   - The total number of reserved tickets cannot exceed the concert's capacity for each ticket level.
   
 
-#### Reservation:
+#### Reservation
 
-**1. Commands** 
+**1. Business Rules**
+
+- A reservation can be created by a logged-in user only.
+- A reservation can be canceled if it is not already canceled or expired.
+- A reservation can expire if it is not already canceled or expired.
+
+**2. Invariants:**
+
+- The reservation cannot be created, canceled, or expired for a user that is not logged in.
+- The reservation cannot be created for an unavailable concert.
+- The reservation cannot be created if the number of requested tickets for each level exceeds the available tickets.
+
+**3. Commands** 
 
 ```csharp
 public record CreateReservation(string ReservationId, string ConcertId, Dictionary<string, int> TicketLevels, string UserId);
@@ -72,7 +86,7 @@ public record CancelReservation(string ReservationId);
 public record ExpireReservation(string ReservationId);
 ````
 
-**2. Events:**
+**4. Events:**
 
 ```csharp
 public record ReservationCreated(string ReservationId, string ConcertId, Dictionary<string, int> TicketLevels, string UserId);
@@ -80,7 +94,7 @@ public record ReservationCancelled(string ReservationId);
 public record ReservationExpired(string ReservationId);
 ```
 
-**3. Aggregate**
+**5. Aggregate**
 
 ```csharp
 public class Reservation
@@ -142,7 +156,7 @@ public class Reservation
 }
 ```
 
-**4. Command Handler**
+**6. Command Handler**
 
 ```csharp
 public class ReservationCommandHandler
@@ -191,17 +205,29 @@ public class ReservationCommandHandler
 
 ```
 
-#### Concert Availability:
+#### Concert Availability
 
-**1. Commands** 
+**1. Business Rules**
+
+- The concert tickets availability is created when a ConcertCreated event occurs.
+- The concert tickets availability is updated when a TicketLevelsUpdated event occurs.
+- The concert tickets availability is updated when a ConcertCancelled event occurs.
+- Tickets can be reserved if there are enough available tickets for the requested ticket levels.
+
+**2. Invariants:**
+
+- The number of available tickets for each level should be non-negative.
+- Tickets cannot be reserved if the number of requested tickets for each level exceeds the available tickets.
+
+**3. Commands** 
 
 None. Just using events from the concert module.
 
-**2. Events:**
+**4. Events:**
 
 None. Just using events from the concert module and reservation aggregate.
 
-**3. Aggregate**
+**5. Aggregate**
 
 ```csharp
 public class ConcertTicketsAvailability
@@ -245,11 +271,11 @@ public class ConcertTicketsAvailability
 
 ```
 
-**4. Command Handler**
+**6. Command Handler**
 
 None.
 
-**5. Event Handler**
+**7. Event Handler**
 
 ```
 public class ConcertEventHandler
