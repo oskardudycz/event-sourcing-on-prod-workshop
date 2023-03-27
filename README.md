@@ -192,3 +192,22 @@ public class ReservationCommandHandler
 
 - **Aggregates:** `TicketDelivery`
 - **Commands:** `PrepareTicketDelivery`, `DeliverOnlineTicket`, `DeliverPrintedTicket`
+- **Events:** TicketDeliveryPrepared, OnlineTicketDelivered, PrintedTicketDelivered
+
+### 6. Payment (Bounded Context: Payments)
+
+- **Aggregates:** `Payment`
+- **Commands:** : `InitiatePayment`, `ConfirmPayment`, `RefundPayment`
+- **Events:** `PaymentInitiated`, `PaymentConfirmed`, `PaymentRefunded`
+
+### 7. User Management (Bounded Context: Users)
+
+- **Aggregates:** `User`
+- **Commands:** : `RegisterUser`, `UpdateUserRole`
+- **Events:** `UserRegistered`, `UserRoleUpdated`
+
+### 8. Finance (Bounded Context: Finance)
+
+- **Aggregates:** `Invoice`, `UserFinancialInfo`
+- **Commands:** `CreateInvoice`, `UpdateInvoice`, `CreateUserFinancialInfo`, `UpdateUserFinancialInfo`
+- **Events:** `InvoiceCreated`, `InvoiceUpdated`, `UserFinancialInfoCreated`, `UserFinancialInfoUpdated`
