@@ -46,7 +46,7 @@
 
 #### Summary
 
-- **Aggregates:** `Reservation`
+- **Aggregates:** `Reservation`, `ConcertTicketsAvailability`
 - **Commands:** `CreateReservation`, `CancelReservation`, `ExpireReservation`
 - **Events:** `ReservationCreated`, `ReservationCancelled`, `ReservationExpired`
 
@@ -62,7 +62,9 @@
   - The total number of reserved tickets cannot exceed the concert's capacity for each ticket level.
   
 
-#### Commands:
+#### Reservation:
+
+**1. Commands** 
 
 ```csharp
 public record CreateReservation(string ReservationId, string ConcertId, Dictionary<string, int> TicketLevels, string UserId);
@@ -70,7 +72,7 @@ public record CancelReservation(string ReservationId);
 public record ExpireReservation(string ReservationId);
 ````
 
-#### Events:
+**2. Events:**
 
 ```csharp
 public record ReservationCreated(string ReservationId, string ConcertId, Dictionary<string, int> TicketLevels, string UserId);
@@ -78,7 +80,7 @@ public record ReservationCancelled(string ReservationId);
 public record ReservationExpired(string ReservationId);
 ```
 
-#### Aggregates
+**3. Aggregate**
 
 ```csharp
 public class Reservation
@@ -110,25 +112,37 @@ public class Reservation
 
     public void Create(CreateReservation command)
     {
-        // Add logic for checking ticket availability, user authentication, etc.
+        if (string.IsNullOrWhiteSpace(command.UserId))
+        {
+            throw new InvalidOperationException("User must be authenticated to create a reservation.");
+        }
+
         Apply(new ReservationCreated(command.ReservationId, command.ConcertId, command.TicketLevels, command.UserId));
     }
 
     public void Cancel(CancelReservation command)
     {
-        // Add logic for checking if the reservation can be cancelled
+        if (IsCancelled || IsExpired)
+        {
+            throw new InvalidOperationException("Cannot cancel an already cancelled or expired reservation.");
+        }
+
         Apply(new ReservationCancelled(command.ReservationId));
     }
 
     public void Expire(ExpireReservation command)
     {
-        // Add logic for checking if the reservation can be expired
+        if (IsCancelled || IsExpired)
+        {
+            throw new InvalidOperationException("Cannot expire an already cancelled or expired reservation.");
+        }
+
         Apply(new ReservationExpired(command.ReservationId));
     }
 }
 ```
 
-#### Command Handlers
+**4. Command Handler**
 
 ```csharp
 public class ReservationCommandHandler
@@ -142,9 +156,19 @@ public class ReservationCommandHandler
 
     public async Task HandleAsync(CreateReservation command)
     {
+        // Load the concert aggregate and reserve tickets.
+        var concert = await _session.Events.AggregateStreamAsync<Concert>(command.ConcertId);
+        concert.ReserveTickets(new ReserveTickets(command.ConcertId, command.TicketLevels));
+
+        // Create the reservation.
         var reservation = new Reservation();
         reservation.Create(command);
+
+        // Append events to both aggregates.
+        _session.Events.Append(command.ConcertId, concert);
         _session.Events.Append(command.ReservationId, reservation);
+
+        // Save the changes in the same transaction.
         await _session.SaveChangesAsync();
     }
 
@@ -165,6 +189,102 @@ public class ReservationCommandHandler
     }
 }
 
+```
+
+#### Concert Availability:
+
+**1. Commands** 
+
+None. Just using events from the concert module.
+
+**2. Events:**
+
+None. Just using events from the concert module and reservation aggregate.
+
+**3. Aggregate**
+
+```csharp
+public class ConcertTicketsAvailability
+{
+    public string ConcertId { get; private set; }
+    public Dictionary<string, int> AvailableTickets { get; private set; }
+
+    public ConcertTicketsAvailability()
+    {
+    }
+
+    private void Apply(ConcertCreated e)
+    {
+        ConcertId = e.ConcertId;
+        AvailableTickets = e.TicketLevels;
+    }
+
+    private void Apply(TicketLevelsUpdated e)
+    {
+        AvailableTickets = e.TicketLevels;
+    }
+
+    private void Apply(ConcertCancelled e)
+    {
+        AvailableTickets = new Dictionary<string, int>();
+    }
+
+    public void ReserveTickets(ReserveTickets command)
+    {
+        foreach (var ticketLevel in command.TicketLevels)
+        {
+            if (!AvailableTickets.ContainsKey(ticketLevel.Key) || AvailableTickets[ticketLevel.Key] < ticketLevel.Value)
+            {
+                throw new InvalidOperationException("Not enough available tickets for the requested ticket level.");
+            }
+
+            AvailableTickets[ticketLevel.Key] -= ticketLevel.Value;
+        }
+    }
+}
+
+```
+
+**4. Command Handler**
+
+None.
+
+**5. Event Handler**
+
+```
+public class ConcertEventHandler
+{
+    private readonly IDocumentSession _session;
+
+    public ConcertEventHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task HandleAsync(ConcertCreated e)
+    {
+        var concertTicketsAvailability = new ConcertTicketsAvailability();
+        concertTicketsAvailability.Apply(e);
+        _session.Events.Append(e.ConcertId, concertTicketsAvailability);
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(TicketLevelsUpdated e)
+    {
+        var concertTicketsAvailability = await _session.Events.AggregateStreamAsync<ConcertTicketsAvailability>(e.ConcertId);
+        concertTicketsAvailability.Apply(e);
+        _session.Events.Append(e.ConcertId, concertTicketsAvailability);
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(ConcertCancelled e)
+    {
+        var concertTicketsAvailability = await _session.Events.AggregateStreamAsync<ConcertTicketsAvailability>(e.ConcertId);
+        concertTicketsAvailability.Apply(e);
+        _session.Events.Append(e.ConcertId, concertTicketsAvailability);
+        await _session.SaveChangesAsync();
+    }
+}
 ```
 
 ### 4. Purchases (Bounded Context: `Orders`)
