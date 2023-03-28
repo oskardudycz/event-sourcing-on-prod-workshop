@@ -254,18 +254,49 @@ public class ConcertCommandHandler
 
 #### Flow
 
-1. A user (unauthenticated or logged in) visits the website, and the system creates a new shopping cart.
-2. The user adds or removes tickets from the cart without being logged in.
-3. Users can clear their cart.
-4. When the user logs in and confirms their selection, the cart information is transferred to their account.
-
-- **Business rules:**
-  - Ensure valid tickets are added to the cart.
-- **Invariants:**
-  - A user cannot have multiple confirmed carts at the same time.
-  - A cart cannot have negative or duplicate ticket quantities.
+1. A user adds a ticket to the cart for the first time, which opens the shopping cart.
+2. The user can add more tickets to the cart from different concerts and ticket levels.
+3. The user can update the quantity of a ticket level in the cart.
+4. The user can remove tickets from the cart.
+5. The user can confirm their shopping cart, triggering the reservation of tickets and the payment process.
+6. The user can cancel their shopping cart, clearing the cart and allowing for a new selection.
 
 #### Shopping Cart
+
+**1. Business Rules**    
+- A user can have only one active shopping cart. The cart's ID is the same as the user's ID.
+- A user can add tickets to the cart from different concerts and ticket levels.
+- A user cannot add the same ticket level from the same concert to the cart more than once. They should update the quantity instead.
+- A user can update the quantity of a ticket level for a specific concert in the cart.
+- A user can remove tickets from the cart.
+- A user can confirm their shopping cart, which will proceed to reserve the tickets and initiate the payment process. Once the cart is confirmed, the cart's state becomes empty again, and the user can start a new shopping cart.
+- A user can cancel their shopping cart, which will clear the cart and make it available for a new selection.
+
+**2. Invariants**
+- The shopping cart must be open (not confirmed or canceled) to add, remove or update items.
+- The quantity of tickets in the cart must be greater than zero and not exceed the available tickets for a specific concert and ticket level.
+- A user can only have one active shopping cart. After confirming or canceling the cart, the cart's state becomes empty, and the user can start a new shopping cart.
+
+**3. Commands**
+
+```csharp
+public record AddItemToCart(string UserId, string ConcertId, string TicketLevelId, int Quantity);
+public record RemoveItemFromCart(string UserId, string ConcertId, string TicketLevelId);
+public record UpdateItemQuantityInCart(string UserId, string ConcertId, string TicketLevelId, int NewQuantity);
+public record ConfirmShoppingCart(string UserId);
+public record CancelShoppingCart(string UserId);
+```
+
+**3. Events**
+
+```csharp
+public record ShoppingCartCreated(string UserId);
+public record ShoppingCartItemAdded(string ShoppingCartId, string ConcertId, string TicketLevelId, int Quantity);
+public record ShoppingCartItemUpdated(string ShoppingCartId, string ConcertId, string TicketLevelId, int NewQuantity);
+public record ShoppingCartItemRemoved(string ShoppingCartId, string ConcertId, string TicketLevelId);
+public record ShoppingCartConfirmed(string ShoppingCartId);
+public record ShoppingCartCancelled(string ShoppingCartId);
+```
 
 **5. Aggregate**
 
@@ -401,45 +432,39 @@ public class ShoppingCartCommandHandler
         await _session.SaveChangesAsync();
     }
 
-    public async Task HandleAsync(AddToCart command)
+    public async Task HandleAsync(RemoveItemFromCart command)
     {
         var shoppingCart = await _session.Events.AggregateStreamAsync<ShoppingCart>(command.UserId);
-        cart.AddItem(command.ConcertId, command.TicketLevelId, command.Quantity);
+        shoppingCart.RemoveItem(command.ConcertId, command.TicketLevelId);
         await _session.Events.AppendAsync(command.UserId, shoppingCart);
         await _session.SaveChangesAsync();
     }
 
-    public async Task HandleAsync(RemoveFromCart command)
+    public async Task HandleAsync(UpdateItemQuantityInCart command)
     {
         var shoppingCart = await _session.Events.AggregateStreamAsync<ShoppingCart>(command.UserId);
-        cart.RemoveItem(command.ConcertId, command.TicketLevelId);
+        shoppingCart.UpdateItemQuantity(command.ConcertId, command.TicketLevelId, command.NewQuantity);
         await _session.Events.AppendAsync(command.UserId, shoppingCart);
         await _session.SaveChangesAsync();
     }
 
-    public async Task HandleAsync(UpdateCartItem command)
+    public async Task HandleAsync(ConfirmShoppingCart command)
     {
         var shoppingCart = await _session.Events.AggregateStreamAsync<ShoppingCart>(command.UserId);
-        cart.UpdateItemQuantity(command.ConcertId, command.TicketLevelId, command.NewQuantity);
+        shoppingCart.Confirm();
         await _session.Events.AppendAsync(command.UserId, shoppingCart);
         await _session.SaveChangesAsync();
     }
 
-    public async Task HandleAsync(ConfirmCart command)
+    public async Task HandleAsync(CancelShoppingCart command)
     {
         var shoppingCart = await _session.Events.AggregateStreamAsync<ShoppingCart>(command.UserId);
-        cart.Confirm();
-        await _session.SaveChangesAsync();
-    }
-
-
-    public async Task HandleAsync(CancelCart command)
-    {
-        var shoppingCart = await _session.Events.AggregateStreamAsync<ShoppingCart>(command.UserId);
-        cart.Cancel();
+        shoppingCart.Cancel();
+        await _session.Events.AppendAsync(command.UserId, shoppingCart);
         await _session.SaveChangesAsync();
     }
 }
+
 ```
 
 ### 3. Reservation (Bounded Context: `Reservations`)
@@ -737,7 +762,7 @@ public class ConcertEventHandler
 
 - **Aggregates:** `TicketDelivery`
 - **Commands:** `PrepareTicketDelivery`, `DeliverOnlineTicket`, `DeliverPrintedTicket`
-- **Events:** TicketDeliveryPrepared, OnlineTicketDelivered, PrintedTicketDelivered
+- **Events:** `TicketDeliveryPrepared`, `OnlineTicketDelivered`, `PrintedTicketDelivered`
 
 ### 6. Payment (Bounded Context: Payments)
 
