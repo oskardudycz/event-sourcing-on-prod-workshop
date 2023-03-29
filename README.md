@@ -2,25 +2,46 @@
 
 ## Overview
 
-Our system is a comprehensive Concert Management System designed to handle various aspects of organizing and managing concerts, such as concert creation, ticket reservations, payments, and user management. It is built with a modular architecture, allowing it to be easily expanded or modified to accommodate new requirements.
+Imagine you're organizing a Beyonce concert in Warsaw, and you need a system to manage every aspect of the event, from ticket reservations to financial transactions. Our system has you covered with the following modules:
 
-The system features multiple modules, including:
+### [Concert Management](#concert-management-module):
+    
+This module takes care of all the behind-the-scenes work that goes into planning the concert. As the organizer, you can create the concert event, set the location (Warsaw), date, and time, and even decide on the different types of tickets available (such as Regular and Golden Circle). You'll also have the power to update or cancel the concert and manage ticket pricing.
 
-**1. Concert Management Module:** This module handles the creation and management of concerts, such as a Beyonce concert in Warsaw. It allows the event organizer to input details about the concert, like the artist performing, different ticket levels (e.g., regular, golden circle), and pricing for each ticket level.
+### [Shopping Cart](#shopping-cart-module):
+In this module, users can collect tickets from multiple concerts in a single shopping cart. Once they're ready to checkout, they can confirm their selection and proceed with the payment. If any issues arise, like a failed payment, the system will handle the necessary compensation process.
 
-**2. Reservation Module:** This module allows users to reserve tickets for concerts, ensuring that they can secure a spot for the event. It manages ticket reservations and makes sure that no more tickets are reserved than the available spots for each ticket level. Users can select the desired ticket level and the number of tickets they want to reserve.
+### [Reservation](#reservation-module):
 
-**3. ShoppingCart Module:** This module enables users to add tickets from multiple concerts to a shopping cart, allowing them to purchase tickets for different events in a single transaction. Users can also select ticket delivery options, such as online or printed tickets, and choose their preferred delivery method (e.g., email or postal service).
+Once you have the concert details sorted, fans can start reserving their tickets through this module. They'll be able to choose from the different ticket types you've set up, and the system will make sure there aren't more reservations than available spots.
 
-**4. Finance Module:** This module manages the financial aspects of the system, including processing payments, generating invoices, and maintaining user financial information. It integrates with external payment gateways, like Stripe, to handle secure payment transactions.
+### [Financial Management](#financial-management-module):
 
-**5. User Management Module:** This module manages user accounts, allowing them to register, log in, and access their account information. It differentiates users based on their roles, such as unauthenticated users, logged-in users, and administrators.
+This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
+
+### [Ticket Management and Delivery](#ticket-management-module):
+
+In this module, the system creates and manages tickets based on user reservations. It takes care of delivering the tickets to users via email or, if they prefer, arranging for printed tickets to be sent through courier services like FedEx.
+
+### [User Management Module](#user-management-module):
+
+This module manages user accounts, allowing them to register, log in, and access their account information. It differentiates users based on their roles, such as unauthenticated users, logged-in users, and administrators.
 
 In the case of a Beyonce concert in Warsaw, the system would allow the event organizer to create the concert, set ticket levels and pricing, and manage any updates. Users interested in attending the concert could reserve their tickets, add them to their shopping cart, and complete the payment process. The system would ensure that no more tickets are reserved than available spots and would handle the financial aspects of the transaction, including invoicing and payment processing. Users would then receive their tickets through their chosen delivery method.
 
 ## Architecture
 
-The architecture of our Concert Management System is designed with modularity, scalability, and maintainability in mind. It follows an event-driven and event-sourced approach, which ensures that the system can react to different events in a highly decoupled and extensible way. The main components of the system's architecture are:
+Our system is built using a microservices architecture with event-driven design and event sourcing, ensuring scalability and resilience. We have implemented various bounded contexts, such as Concert Management, Reservation, Shopping Cart, Financial Management, and Ticket Management, to segregate the responsibilities and functionalities.
+
+We use C# 11 and Marten as the underlying technology stack for the implementation of commands, events, and aggregates. Marten's support for event sourcing and document storage simplifies the development and maintenance of our system.
+
+Each bounded context consists of aggregates, commands, events, and event handlers. We follow the Command-Query Responsibility Segregation (CQRS) pattern, separating read and write operations. The system relies on integration events to communicate between bounded contexts, allowing for a decoupled architecture.
+
+To send emails, such as ticket delivery, we have integrated the system with Mailgun, an email service provider that offers a powerful API and idempotency support. This ensures that users receive their tickets reliably and securely.
+
+Overall, the architecture is designed to be modular, maintainable, and efficient in handling the various aspects of concert management, ticket reservations, and sales.
+
+The main components of the system's architecture are:
 
 **1. Bounded Contexts:** The system is divided into multiple bounded contexts, each encapsulating a specific domain within the concert management system. These include the Concert Management, Reservation, ShoppingCart, Finance, and User Management modules. Bounded contexts promote separation of concerns and reduce coupling between different parts of the system.
 
@@ -105,7 +126,9 @@ graph LR
 
 ## Bounded Contexts, Aggregates, Commands, and Events
 
-### 1. Concert Management (Bounded Context: `Concerts`)
+<a href='#concert-management-module' id='concert-management-module' class='anchor' aria-hidden='true'></a>
+
+### 1. Concert Management Module
 
 #### Summary
 
@@ -244,7 +267,9 @@ public class ConcertCommandHandler
 }
 ```
 
-### 2. Shopping Cart (Bounded Context: `ShoppingCarts`)
+<a href='#shopping-cart-module' id='shopping-cart-module' class='anchor' aria-hidden='true'></a>
+
+### 2. Shopping Cart Module
 
 #### Summary
 
@@ -467,7 +492,9 @@ public class ShoppingCartCommandHandler
 
 ```
 
-### 3. Reservation (Bounded Context: `Reservations`)
+<a href='#reservation-module' id='reservation-module' class='anchor' aria-hidden='true'></a>
+
+### 3. Reservation Module
 
 #### Summary
 
@@ -737,7 +764,10 @@ public class ConcertEventHandler
 }
 ```
 
-### 4. Purchases (Bounded Context: `Orders`)
+<a href='#order-management-module' id='orders-module' class='anchor' aria-hidden='true'></a>
+
+
+### 4. Order Management Module
 
 #### Summary
 
@@ -747,16 +777,432 @@ public class ConcertEventHandler
 
 #### Flow
 
-1. When the user confirms their cart and initiates the purchase process, the system creates orders for each concert.
-2. Upon successful payment, the system marks the order as complete.
-3. If the payment fails, the system reverts the ticket reservation and any associated actions.
+The Order represents a confirmed purchase made by a user. It is created when the user confirms their ShoppingCart, and it serves as a bridge between the ShoppingCart, Reservations, Tickets, Payment, and Invoice. Here's how the Order is related to these entities:
 
-- **Business rules:**
-  - Ensure valid payment information and process payments securely.
-- **Invariants:**
-  - An order cannot be marked as complete without successful payment.
+**1. ShoppingCart:** When the user confirms their ShoppingCart, the system creates an Order with the details from the ShoppingCart. The Order holds information about the selected concerts, ticket levels, and quantities.
 
-### 5. Ticket Delivery (Bounded Context: `TicketDelivery`)
+**2. Reservations:** After the Order is created, the system reserves the tickets for each concert in the Order. Each reservation is associated with the Order.
+
+**3. Tickets:** Once the reservations are confirmed, the system generates tickets for the Order. These tickets include details such as the concert, ticket level, and user information.
+
+**4. Payment:** When the Order is created, the system initiates the payment process. The Payment is linked to the Order, and the payment status is updated based on the success or failure of the payment transaction.
+
+**5. Invoice:** After the payment is successful, the system generates an Invoice for the Order. The Invoice includes details of the ticket purchases, such as the concert, ticket levels, quantities, and the total amount.
+
+The relationships between the Order and other entities ensure a smooth flow of information and actions throughout the ticket purchasing process. The Order serves as a central point connecting the ShoppingCart, Reservations, Tickets, Payment, and Invoice, providing a comprehensive view of the user's purchase.
+
+#### Order
+
+**1. Business Rules**
+
+1. When a user confirms their ShoppingCart, an event (e.g., `ShoppingCartConfirmed`) is emitted. This event should contain the necessary data to create an Order, such as the user's ID, shopping cart ID, and selected items.
+
+2. An event handler within the Order bounded context listens for the `ShoppingCartConfirmed` event. When this event is received, the handler creates a new Order using the `CreateOrder` command, which in turn emits the `OrderCreated` event.
+
+3. The Reservation bounded context listens for the `OrderCreated` event. When this event is received, the handler reserves tickets for each concert in the Order. The Reservations are associated with the Order, and their status is updated accordingly (e.g., `ReservationCreated` and `ReservationConfirmed` events).
+
+4. The Financial bounded context also listens for the `OrderCreated` event. When this event is received, the handler initiates the payment process by creating a Payment related to the Order. The payment status is updated based on the success or failure of the payment transaction (e.g., `PaymentCreated`, `PaymentCompleted`, and `PaymentFailed` events).
+
+5. If the payment is successful, the Financial bounded context generates an Invoice for the Order and emits an InvoiceCreated event.
+
+6. Once the payment is successful and the reservations are confirmed, the Order bounded context can update the Order status to confirmed by handling the `ConfirmOrder` command, which emits the `OrderConfirmed` event. In case of any failure or cancellation, the `CancelOrder` command can be issued, emitting the `OrderCancelled` event.
+
+7. If the payment fails, the Financial bounded context should emit a PaymentFailed event, which includes the Order ID and the reason for the failure. The Order bounded context listens for this event and handles it by issuing a CancelOrder command, which in turn emits the OrderCancelled event.
+
+8.The Reservation bounded context should also listen for the OrderCancelled event. When this event is received, the handler cancels any Reservations associated with the Order by issuing CancelReservation commands, which emit ReservationCancelled events.
+
+9. Similarly, if the reservation process fails (e.g., due to insufficient ticket availability), the Reservation bounded context should emit a ReservationFailed event, which includes the Order ID and the reason for the failure. The Order bounded context listens for this event and handles it by issuing a CancelOrder command, which emits the OrderCancelled event. This will trigger the cancellation of any other Reservations associated with the Order, as well as the reversal of the payment (if applicable).
+
+**2. Invariants:**
+
+1. An order can only be created with a valid user ID.
+2. Reserved tickets can only be added to the order when the order is in a Pending state.
+3. An order can only be confirmed when it is in a Pending state.
+4. Payment success can only be processed when the order is in a Confirmed state.
+5. Payment failure can only be processed when the order is in a Confirmed state.
+6. An order can only be canceled when it is in a Pending or Confirmed state.
+7. An order cannot be modified (adding reserved tickets, confirming, processing payments, or canceling) when it is in a Paid or Canceled state.
+
+**3. Commands** 
+
+```csharp
+public record CreateOrder(string UserId, string ShoppingCartId, List<OrderItem> OrderItems);
+public record ConfirmOrder(string OrderId);
+public record CancelOrder(string OrderId);
+public record CancelOrderDueToTimeout(string OrderId);
+```
+
+**4. Events:**
+
+```csharp
+public record OrderCreated(string OrderId, string UserId, string ShoppingCartId, List<OrderItem> OrderItems);
+public record OrderConfirmed(string OrderId);
+public record OrderCancelled(string OrderId);
+public record OrderCancelledDueToTimeout(string OrderId);
+```
+
+**5. Aggregate**
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Marten.Schema;
+
+public record ReservedTicket(string ConcertId, string TicketLevel, int Quantity);
+
+public enum OrderStatus { Pending, Confirmed, Paid, Cancelled }
+
+public class Order
+{
+    [Identity]
+    public string Id { get; private init; }
+    public string UserId { get; private set; }
+    public OrderStatus Status { get; private set; }
+    public decimal TotalAmount { get; private set; }
+    public IReadOnlyList<ReservedTicket> ReservedTickets { get; private set; } = new List<ReservedTicket>();
+    public string? PaymentTransactionId { get; private set; }
+
+    private Order() { } // For Marten
+
+    public Order(string id, string userId)
+    {
+        Id = id;
+        UserId = userId;
+        Apply(new OrderCreated(id, userId));
+    }
+
+    public void AddReservedTickets(IEnumerable<ReservedTicket> reservedTickets)
+    {
+        if (Status != OrderStatus.Pending)
+        {
+            throw new InvalidOperationException("Reserved tickets can only be added when the order is in pending status.");
+        }
+
+        Apply(new ReservedTicketsAdded(Id, reservedTickets.ToList()));
+    }
+
+    public void ConfirmOrder()
+    {
+        if (Status != OrderStatus.Pending)
+        {
+            throw new InvalidOperationException("The order can only be confirmed when it is in pending status.");
+        }
+
+        Apply(new OrderConfirmed(Id));
+    }
+
+    public void ProcessPaymentSuccess(decimal amount, string transactionId)
+    {
+        if (Status != OrderStatus.Confirmed)
+        {
+            throw new InvalidOperationException("The payment can only be processed when the order is in confirmed status.");
+        }
+
+        Apply(new PaymentSucceeded(Id, amount, transactionId));
+    }
+
+    public void ProcessPaymentFailure(string transactionId)
+    {
+        if (Status != OrderStatus.Confirmed)
+        {
+            throw new InvalidOperationException("The payment failure can only be processed when the order is in confirmed status.");
+        }
+
+        Apply(new PaymentFailed(Id, transactionId));
+    }
+
+    public void CancelOrder()
+    {
+        if (Status != OrderStatus.Pending && Status != OrderStatus.Confirmed)
+        {
+            throw new InvalidOperationException("The order can only be cancelled when it is in pending or confirmed status.");
+        }
+
+        Apply(new OrderCancelled(Id));
+    }
+
+    public void CancelOrderDueToTimeout()
+    {
+        if (Status != OrderStatus.Pending)
+        {
+            throw new InvalidOperationException("The order can only be cancelled due to timeout when it is in pending status.");
+        }
+
+        Apply(new OrderCancelledDueToTimeout(Id));
+    }
+
+    private void Apply(OrderCancelled @event)
+    {
+        Status = OrderStatus.Cancelled;
+    }
+
+    private void Apply(OrderCancelledDueToTimeout @event)
+    {
+        Status = OrderStatus.Cancelled;
+    }
+
+    private void Apply(object @event)
+    {
+        switch (@event)
+        {
+            case ReservedTicketsAdded e:
+                _reservedTickets.AddRange(e.ReservedTickets);
+                break;
+
+            case OrderConfirmed _:
+                IsConfirmed = true;
+                break;
+
+            case PaymentSucceeded e:
+                IsPaymentSucceeded = true;
+                TransactionId = e.TransactionId;
+                break;
+
+            case PaymentFailed _:
+                IsPaymentSucceeded = false;
+                TransactionId = null;
+                break;
+
+            default:
+                throw new InvalidOperationException($"Unknown event '{@event.GetType().Name}'");
+        }
+    }
+}
+
+public record ReservedTicket(string ConcertId, string TicketLevel, int Quantity, decimal Price);
+public record ReservedTicketsAdded(string OrderId, List<ReservedTicket> ReservedTickets);
+public record OrderConfirmed(string OrderId);
+public record PaymentSucceeded(string OrderId, decimal Amount, string TransactionId);
+public record PaymentFailed(string OrderId, decimal Amount, string Reason);
+```
+
+**6. Command Handler**
+
+```csharp
+public record AddReservedTicketsCommand(string OrderId, IEnumerable<ReservedTicket> ReservedTickets);
+public record ConfirmOrderCommand(string OrderId);
+public record ProcessPaymentSuccessCommand(string OrderId, decimal Amount, string TransactionId);
+public record ProcessPaymentFailureCommand(string OrderId, decimal Amount, string Reason);
+
+public class OrderCommandHandler
+{
+    private readonly IDocumentSession _session;
+
+    public OrderCommandHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task HandleAsync(AddReservedTicketsCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.AddReservedTickets(command.ReservedTickets);
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(ConfirmOrderCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.ConfirmOrder();
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(ProcessPaymentSuccessCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.ProcessPaymentSuccess(command.Amount, command.TransactionId);
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(ProcessPaymentFailureCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.ProcessPaymentFailure(command.Amount, command.Reason);
+        await _session.SaveChangesAsync();
+    } 
+    
+    public async Task HandleAsync(CancelOrderCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.CancelOrder();
+        await _session.SaveChangesAsync();
+    }
+
+    public async Task HandleAsync(CancelOrderDueToTimeoutCommand command)
+    {
+        var order = await _session.LoadAsync<Order>(command.OrderId);
+        order.CancelOrderDueToTimeout();
+        await _session.SaveChangesAsync();
+    }
+}
+
+```
+
+**7. Event Handlers**
+
+Shopping Cart Events:
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using Marten;
+using MediatR;
+
+public class ShoppingCartConfirmedHandler : INotificationHandler<ShoppingCartConfirmed>
+{
+    private readonly IDocumentSession _session;
+
+    public ShoppingCartConfirmedHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task Handle(ShoppingCartConfirmed notification, CancellationToken cancellationToken)
+    {
+        // Extract necessary data from the ShoppingCartConfirmed event
+        var userId = notification.UserId;
+        var shoppingCartId = notification.ShoppingCartId;
+        var orderItems = new List<OrderItem>();
+
+        foreach (var item in notification.Items)
+        {
+            var orderItem = new OrderItem
+            {
+                ConcertId = item.ConcertId,
+                TicketLevelId = item.TicketLevelId,
+                Quantity = item.Quantity
+            };
+
+            orderItems.Add(orderItem);
+        }
+
+        // Create the Order aggregate using the new CreateFromShoppingCart method
+        var orderId = Guid.NewGuid().ToString();
+        var order = Order.CreateFromShoppingCart(orderId, userId, shoppingCartId, orderItems);
+
+        // Save the Order aggregate
+        _session.Events.Append(orderId, order.PendingEvents.ToArray());
+        await _session.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+Reservation Events:
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using Marten;
+using MediatR;
+
+public class ReservationConfirmedHandler
+    : INotificationHandler<ReservationConfirmed>, INotificationHandler<ReservationFailed>
+{
+    private readonly IDocumentSession _session;
+
+    public ReservationConfirmedHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task Handle(ReservationConfirmed notification, CancellationToken cancellationToken)
+    {
+        // Extract necessary data from the ReservationConfirmed event
+        var orderId = notification.OrderId;
+        var reservationId = notification.ReservationId;
+        var reservedTickets = notification.ReservedTickets;
+
+        // Load the Order aggregate
+        var order = await _session.Events.AggregateStreamAsync<Order>(orderId, cancellationToken);
+
+        // Process the reservation confirmation
+        order.ProcessReservationConfirmation(reservationId, reservedTickets);
+
+        // Save the Order aggregate
+        _session.Events.Append(orderId, order.PendingEvents.ToArray());
+        await _session.SaveChangesAsync(cancellationToken);
+    }
+    
+    public async Task Handle(ReservationFailed notification, CancellationToken cancellationToken)
+    {
+        // Extract necessary data from the ReservationFailed event
+        var orderId = notification.OrderId;
+        var reservationId = notification.ReservationId;
+        var reason = notification.Reason;
+
+        // Load the Order aggregate
+        var order = await _session.Events.AggregateStreamAsync<Order>(orderId, cancellationToken);
+
+        // Process the reservation failure
+        order.ProcessReservationFailure(reservationId, reason);
+
+        // Save the Order aggregate
+        _session.Events.Append(orderId, order.PendingEvents.ToArray());
+        await _session.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+Payments Events:
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using Marten;
+using MediatR;
+
+public class PaymentSucceededHandler
+    : INotificationHandler<PaymentSucceeded>, INotificationHandler<PaymentFailed>
+{
+    private readonly IDocumentSession _session;
+
+    public PaymentSucceededHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task Handle(PaymentSucceeded notification, CancellationToken cancellationToken)
+    {
+        // Extract necessary data from the PaymentSucceeded event
+        var orderId = notification.OrderId;
+        var amount = notification.Amount;
+        var transactionId = notification.TransactionId;
+
+        // Load the Order aggregate
+        var order = await _session.Events.AggregateStreamAsync<Order>(orderId, cancellationToken);
+
+        // Process the payment success
+        order.ProcessPaymentSuccess(amount, transactionId);
+
+        // Save the Order aggregate
+        _session.Events.Append(orderId, order.PendingEvents.ToArray());
+        await _session.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task Handle(PaymentFailed notification, CancellationToken cancellationToken)
+    {
+        // Extract necessary data from the PaymentFailed event
+        var orderId = notification.OrderId;
+        var amount = notification.Amount;
+        var reason = notification.Reason;
+
+        // Load the Order aggregate
+        var order = await _session.Events.AggregateStreamAsync<Order>(orderId, cancellationToken);
+
+        // Process the payment failure
+        order.ProcessPaymentFailure(amount, reason);
+
+        // Save the Order aggregate
+        _session.Events.Append(orderId, order.PendingEvents.ToArray());
+        await _session.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+<a href='#ticket-management-module' id='ticket-management-module' class='anchor' aria-hidden='true'></a>
+
+### 5. Ticket Management And Delivery Module
 
 #### Summary
 
@@ -770,7 +1216,9 @@ public class ConcertEventHandler
 - **Commands:** : `InitiatePayment`, `ConfirmPayment`, `RefundPayment`
 - **Events:** `PaymentInitiated`, `PaymentConfirmed`, `PaymentRefunded`
 
-### 7. User Management (Bounded Context: Users)
+<a href='#user-management-module' id='user-management-module' class='anchor' aria-hidden='true'></a>
+
+### 7. User Management Module
 
 - **Aggregates:** `User`
 - **Commands:** : `RegisterUser`, `UpdateUserRole`
@@ -781,3 +1229,61 @@ public class ConcertEventHandler
 - **Aggregates:** `Invoice`, `UserFinancialInfo`
 - **Commands:** `CreateInvoice`, `UpdateInvoice`, `CreateUserFinancialInfo`, `UpdateUserFinancialInfo`
 - **Events:** `InvoiceCreated`, `InvoiceUpdated`, `UserFinancialInfoCreated`, `UserFinancialInfoUpdated`
+
+### Flow
+
+#### Payment
+
+**1. Business Rules**
+
+- TODO
+
+**2. Invariants:**
+
+- TODO
+
+**3. Commands** 
+
+```csharp
+public record CreatePayment(string UserId, string OrderId, decimal PaymentAmount, string PaymentMethod);
+public record CompletePayment(string PaymentId);
+public record FailPayment(string PaymentId);
+```
+
+**4. Events:**
+
+```csharp
+public record PaymentCreated(string PaymentId, string UserId, string OrderId, decimal PaymentAmount, string PaymentMethod);
+public record PaymentCompleted(string PaymentId);
+public record PaymentFailed(string PaymentId);
+```
+
+**5. Aggregate**
+
+TODO
+
+#### Invoice
+
+**1. Business Rules**
+
+- TODO
+
+**2. Invariants:**
+
+- TODO
+
+**3. Commands** 
+
+```csharp
+public record CreateInvoice(string UserId, string OrderId, InvoiceDetails InvoiceDetails);
+```
+
+**4. Events:**
+
+```csharp
+public record InvoiceCreated(string InvoiceId, string UserId, string OrderId, InvoiceDetails InvoiceDetails);
+```
+
+**5. Aggregate**
+
+TODO
