@@ -15,6 +15,9 @@ In this module, users can collect tickets from multiple concerts in a single sho
 
 Once you have the concert details sorted, fans can start reserving their tickets through this module. They'll be able to choose from the different ticket types you've set up, and the system will make sure there aren't more reservations than available spots.
 
+### [Order Management](#order-management-module):
+This module coordinates the whole process of placing an order, including creating orders based on confirmed shopping carts, tracking the order status, and managing any changes or cancellations. It also ensures that the order details, such as ticket reservations and delivery methods, are properly handled.
+
 ### [Financial Management](#financial-management-module):
 
 This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
@@ -25,7 +28,7 @@ In this module, the system creates and manages tickets based on user reservation
 
 ### [User Management Module](#user-management-module):
 
-This module manages user accounts, allowing them to register, log in, and access their account information. It differentiates users based on their roles, such as unauthenticated users, logged-in users, and administrators.
+This module handles user registration, authentication, and role management. It enables users to create an account, log in, and perform actions based on their assigned roles, such as regular user, administrator, or concert organizer.
 
 In the case of a Beyonce concert in Warsaw, the system would allow the event organizer to create the concert, set ticket levels and pricing, and manage any updates. Users interested in attending the concert could reserve their tickets, add them to their shopping cart, and complete the payment process. The system would ensure that no more tickets are reserved than available spots and would handle the financial aspects of the transaction, including invoicing and payment processing. Users would then receive their tickets through their chosen delivery method.
 
@@ -319,7 +322,7 @@ public record ShoppingCartCreated(string UserId);
 public record ShoppingCartItemAdded(string ShoppingCartId, string ConcertId, string TicketLevelId, int Quantity);
 public record ShoppingCartItemUpdated(string ShoppingCartId, string ConcertId, string TicketLevelId, int NewQuantity);
 public record ShoppingCartItemRemoved(string ShoppingCartId, string ConcertId, string TicketLevelId);
-public record ShoppingCartConfirmed(string ShoppingCartId);
+public record ShoppingCartConfirmed(string ShoppingCartId, string UserId, List<ReservedTicket> ReservedTickets, DeliveryMethod DeliveryMethod);
 public record ShoppingCartCancelled(string ShoppingCartId);
 ```
 
@@ -331,6 +334,7 @@ public class ShoppingCart
     public string Id { get; private set; }
     public Dictionary<string, CartItem> Items { get; private set; } = new();
     public bool IsOpened { get; private set; }
+    public DeliveryMethod? DeliveryMethod { get; private set; }
 
     public ShoppingCart() { }
 
@@ -396,6 +400,18 @@ public class ShoppingCart
     {
         EnsureOpened();
         Apply(new ShoppingCartCancelled(Id));
+    }
+
+    public void SetDeliveryMethod(DeliveryMethod deliveryMethod)
+    {
+        if (DeliveryMethod != null) throw new InvalidOperationException("Delivery method has already been set");
+
+        Apply(new DeliveryMethodSet(Id, UserId, deliveryMethod));
+    }
+
+    private void Apply(DeliveryMethodSet e)
+    {
+        DeliveryMethod = e.DeliveryMethod;
     }
 
     private void Apply(ShoppingCartCreated @event)
@@ -1206,9 +1222,231 @@ public class PaymentSucceededHandler
 
 #### Summary
 
-- **Aggregates:** `TicketDelivery`
-- **Commands:** `PrepareTicketDelivery`, `DeliverOnlineTicket`, `DeliverPrintedTicket`
-- **Events:** `TicketDeliveryPrepared`, `OnlineTicketDelivered`, `PrintedTicketDelivered`
+- **Aggregates:** `Ticket`, `TicketDelivery`
+- **Commands:** `PrepareTicketDelivery`, `DeliverOnlineTicket`, `DeliverPrintedTicket`, `ValidateTicket`
+- **Events:** `TicketCreated`, `TicketDeliveryPrepared`, `OnlineTicketDelivered`, `PrintedTicketDelivered`, `TicketValidated`, `TicketValidationFailed`
+
+#### Flow
+
+When a reservation is confirmed in the Reservation module, it will emit a ReservationConfirmed event. The Ticket Management module will have an event handler that listens for this event. Upon receiving the event, it will trigger the CreateTicket command to create the tickets associated with that reservation.
+
+Similarly, when an order is confirmed in the Order module, it will emit an OrderConfirmed event. The Ticket Management module will have an event handler that listens for this event and triggers the appropriate ticket delivery method (SendTicketByEmail or SendTicketByCourier) based on the delivery information provided in the event.
+
+If an admin needs to manually trigger the sending of a ticket, instead of invoking a direct command, they can emit a custom event (e.g., AdminTicketSendRequested) which the Ticket Management module will listen to and trigger the appropriate ticket delivery method.
+
+The Ticket Management module will integrate with an external email service like Mailgun to send email tickets. When the SendTicketByEmail command is executed, it will interact with the Mailgun API to send the ticket to the user's email address.
+    
+Similarly, the Ticket Management module will integrate with courier services to send printed tickets. When the SendTicketByCourier command is executed, it will interact with the courier service's API to initiate the shipping process and obtain tracking information.
+
+
+#### Ticket
+
+**1. Business Rules**
+
+1. A ticket cannot be created if the reservation is not confirmed.
+2. A ticket cannot be created if the total number of tickets reserved for the concert exceeds the available capacity.
+
+**2. Invariants:**
+
+1. A ticket must be associated with a valid concert and user.
+2. The ticket type (e.g., Regular, Golden Circle) must be valid for the concert.
+3. A ticket must have a unique identifier.
+
+**3. Commands** 
+
+```csharp
+public record ValidateTicket(string TicketId, string ConcertId);
+```
+
+**4. Events:**
+
+```csharp
+public record TicketCreated(string TicketId, string ConcertId, string UserId, string TicketLevel, bool IsPrinted);
+public record TicketValidated(string TicketId, string ConcertId);
+public record TicketValidationFailed(string TicketId, string ConcertId, string Reason);
+```
+
+**5. Aggregate**
+
+
+```csharp
+public class Ticket
+{
+    public string Id { get; private set; }
+    public string ConcertId { get; private set; }
+    public string UserId { get; private set; }
+    public string TicketLevel { get; private set; }
+    public bool IsPrinted { get; private set; }
+    public bool IsValidated { get; private set; }
+
+    private Ticket() { }
+
+    public Ticket(string id, string concertId, string userId, string ticketLevel, bool isPrinted)
+    {
+        Apply(new TicketCreated(id, concertId, userId, ticketLevel, isPrinted));
+    }
+
+    public void Validate(string concertId)
+    {
+        if (IsValidated)
+        {
+            Apply(new TicketValidationFailed(Id, concertId, "Ticket has already been validated."));
+            return;
+        }
+
+        if (ConcertId != concertId)
+        {
+            Apply(new TicketValidationFailed(Id, concertId, "Ticket is not valid for this concert."));
+            return;
+        }
+
+        Apply(new TicketValidated(Id, concertId));
+    }
+
+    // Apply methods
+    private void Apply(TicketCreated e)
+    {
+        Id = e.TicketId;
+        ConcertId = e.ConcertId;
+        UserId = e.UserId;
+        TicketLevel = e.TicketLevel;
+        IsPrinted = e.IsPrinted;
+        IsValidated = false;
+    }
+
+    private void Apply(TicketValidated e)
+    {
+        IsValidated = true;
+    }
+
+    private void Apply(TicketValidationFailed e)
+    {
+        // No state changes are required for a failed validation
+    }
+}
+```
+
+**6. Event Handler**
+
+```csharp
+public class TicketEventHandler
+{
+    private readonly IDocumentSession _session;
+
+    public TicketEventHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task HandleAsync(OrderCreated @event)
+    {
+        foreach (var reservation in @event.Reservations)
+        {
+            var ticket = Ticket.Create(reservation.UserId, reservation.ConcertId, reservation.TicketType, reservation.Quantity);
+
+            await _session.Events.AppendAsync(ticket.Id, ticket.PendingEvents.ToArray());
+        }
+
+        await _session.SaveChangesAsync();
+    }
+}
+```
+
+#### Ticket Delivery
+
+**1. Business Rules**
+
+1. Ticket delivery must be initiated only after the order is confirmed and payment is successful.
+2. A ticket can only be delivered once. If the delivery fails, the system must handle the necessary compensation or retry process.
+
+**2. Invariants:**
+
+1. A ticket delivery method must be chosen before the ticket is delivered. The possible methods are email and courier service (e.g., FedEx).
+2. If the delivery method is email, the user's email address must be valid.
+3. If the delivery method is courier service, the user's shipping address must be valid.
+
+
+**3. Commands** 
+
+```csharp
+public record SendTicketByEmail(string TicketId, string Email);
+public record ShipTicket(string TicketId, string CourierName, string TrackingNumber);
+```
+
+**4. Events:**
+
+```csharp
+public record TicketEmailSent(string TicketId, string Email);
+public record TicketShipped(string TicketId, string CourierName, string TrackingNumber);
+```
+
+**5. Aggregate**
+
+```csharp
+public class TicketDelivery
+{
+    public string TicketId { get; private set; }
+    public string Email { get; private set; }
+    public string CourierName { get; private set; }
+    public string TrackingNumber { get; private set; }
+
+    private TicketDelivery() { }
+
+    public TicketDelivery(string ticketId)
+    {
+        TicketId = ticketId;
+    }
+
+    public void SendByEmail(string email)
+    {
+        Apply(new TicketEmailSent(TicketId, email));
+    }
+
+    public void Ship(string courierName, string trackingNumber)
+    {
+        Apply(new TicketShipped(TicketId, courierName, trackingNumber));
+    }
+
+    // Apply methods
+    private void Apply(TicketEmailSent e)
+    {
+        Email = e.Email;
+    }
+
+    private void Apply(TicketShipped e)
+    {
+        CourierName = e.CourierName;
+        TrackingNumber = e.TrackingNumber;
+    }
+}
+```
+
+**6. Event Handler**
+
+```csharp
+public class TicketDeliveryEventHandler
+{
+    private readonly IDocumentSession _session;
+
+    public TicketDeliveryEventHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task Handle(OrderCreated e)
+    {
+        foreach (var ticket in e.Tickets)
+        {
+            for (int i = 0; i < ticket.Value; i++)
+            {
+                var ticketDelivery = new TicketDelivery($"{e.OrderId}-{ticket.Key}-{i}", e.DeliveryMethod);
+                await _session.Events.Append(ticketDelivery.TicketId, ticketDelivery);
+            }
+        }
+        await _session.SaveChangesAsync();
+    }
+}
+```
 
 ### 6. Payment (Bounded Context: Payments)
 
@@ -1236,11 +1474,11 @@ public class PaymentSucceededHandler
 
 **1. Business Rules**
 
-- TODO
+TODO
 
 **2. Invariants:**
 
-- TODO
+TODO
 
 **3. Commands** 
 
@@ -1260,7 +1498,6 @@ public record PaymentFailed(string PaymentId);
 
 **5. Aggregate**
 
-TODO
 
 #### Invoice
 
