@@ -422,7 +422,9 @@ public record ShoppingCartCreated(string UserId);
 public record ShoppingCartItemAdded(string ShoppingCartId, string ConcertId, string TicketLevelId, int Quantity);
 public record ShoppingCartItemUpdated(string ShoppingCartId, string ConcertId, string TicketLevelId, int NewQuantity);
 public record ShoppingCartItemRemoved(string ShoppingCartId, string ConcertId, string TicketLevelId);
-public record ShoppingCartConfirmed(string ShoppingCartId, string UserId, List<ReservedTicket> ReservedTickets, DeliveryMethod DeliveryMethod);
+public record ShoppingCartConfirmed(string ShoppingCartId, string UserId, List<ReservedTicket> ReservedTickets, 
+    DeliveryMethod DeliveryMethod, string CustomerName, string CustomerAddress, string CustomerEmail);
+
 public record ShoppingCartCancelled(string ShoppingCartId);
 ```
 
@@ -951,7 +953,7 @@ public record CancelOrderDueToTimeout(string OrderId);
 **4. Events:**
 
 ```csharp
-public record OrderCreated(string OrderId, string UserId, string ShoppingCartId, List<OrderItem> OrderItems);
+public record OrderCreated(string OrderId, string UserId, string ShoppingCartId, List<OrderItem> OrderItems, CustomerInfo CustomerInfo);
 public record OrderConfirmed(string OrderId);
 public record OrderCancelled(string OrderId);
 public record OrderCancelledDueToTimeout(string OrderId);
@@ -978,14 +980,15 @@ public class Order
     public decimal TotalAmount { get; private set; }
     public IReadOnlyList<ReservedTicket> ReservedTickets { get; private set; } = new List<ReservedTicket>();
     public string? PaymentTransactionId { get; private set; }
+    private CustomerInfo CustomerInfo { get; private set; }
 
     private Order() { } // For Marten
 
-    public Order(string id, string userId)
+    public Order(string id, string userId, CustomerInfo customerInfo)
     {
         Id = id;
         UserId = userId;
-        Apply(new OrderCreated(id, userId));
+        Apply(new OrderCreated(id, userId, CustomerInfo));
     }
 
     public void AddReservedTickets(IEnumerable<ReservedTicket> reservedTickets)
@@ -1046,6 +1049,15 @@ public class Order
         }
 
         Apply(new OrderCancelledDueToTimeout(Id));
+    }
+
+    public void Apply(OrderCreated e)
+    {
+        Id = e.OrderId;
+        _tickets = e.Tickets;
+        _userId = e.UserId;
+        _customerInfo = e.CustomerInfo;
+        _status = OrderStatus.Created;
     }
 
     private void Apply(OrderCancelled @event)
@@ -1195,7 +1207,9 @@ public class ShoppingCartConfirmedHandler : INotificationHandler<ShoppingCartCon
 
         // Create the Order aggregate using the new CreateFromShoppingCart method
         var orderId = Guid.NewGuid().ToString();
-        var order = Order.CreateFromShoppingCart(orderId, userId, shoppingCartId, orderItems);
+        var customerInfo = new CustomerInfo(e.CustomerName, e.CustomerAddress, e.CustomerEmail);
+
+        var order = Order.CreateFromShoppingCart(orderId, userId, shoppingCartId, orderItems, customerInfo);
 
         // Save the Order aggregate
         _session.Events.Append(orderId, order.PendingEvents.ToArray());
@@ -1632,15 +1646,27 @@ In this example, we are using the `IMailgunClient` from the `Mailgun.Extensions.
 
 ### Flow
 
+1. When the user confirms their shopping cart, an OrderConfirmed event is triggered.
+2. A command handler or application service listens to the OrderConfirmed event and creates a new Payment aggregate with the initial PaymentStarted event. The Payment aggregate enforces the invariants, like making sure the amount is greater than 0.
+3. The command handler or application service then calls the Stripe service with the necessary details (e.g., amount, currency, and user's payment method) to create a charge.
+4. If the charge is successful, the command handler or application service calls the ProcessPayment method on the Payment aggregate, which emits a `PaymentProcessed` event, updating the payment status to Processed.
+5. If the charge fails, the command handler or application service calls the FailPayment method on the Payment aggregate, which emits a `PaymentFailed` event, updating the payment status to Failed.
+6. The events emitted by the Payment aggregate are persisted in the event store, and the necessary event handlers react to these events to perform any additional actions, like updating the order status, sending notifications, etc.
+
 #### Payment
 
 **1. Business Rules**
 
-TODO
+1. A payment must be associated with a specific Order and User.
+2. The payment amount must be a positive value.
+3. The payment currency must be a valid ISO currency code.
+4. The payment method ID must be valid and provided by the user during the payment process.
+5. The payment can only be processed once.
 
 **2. Invariants:**
 
-TODO
+1. The payment status must be one of the following: Pending, Succeeded, or Failed.
+2. The payment ID and Stripe charge ID must be unique and non-empty.
 
 **3. Commands** 
 
@@ -1660,29 +1686,265 @@ public record PaymentFailed(string PaymentId);
 
 **5. Aggregate**
 
+```csharp
+public class Payment : AggregateBase
+{
+    private Guid _orderId;
+    private Guid _userId;
+    private decimal _amount;
+    private PaymentStatus _status;
+    // Add any additional fields if necessary
+
+    public Payment() { }
+
+    public Payment(Guid paymentId, Guid orderId, Guid userId, decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentException("Payment amount must be greater than 0.", nameof(amount));
+        }
+
+        var paymentStarted = new PaymentStarted(paymentId, orderId, userId, amount);
+        Apply(paymentStarted);
+    }
+
+    public void ProcessPayment(string stripeTransactionId)
+    {
+        if (_status != PaymentStatus.Started)
+        {
+            throw new InvalidOperationException("Payment must be in Started status to be processed.");
+        }
+
+        var paymentProcessed = new PaymentProcessed(Id, stripeTransactionId);
+        Apply(paymentProcessed);
+    }
+
+    public void FailPayment(string failureReason)
+    {
+        if (_status != PaymentStatus.Started)
+        {
+            throw new InvalidOperationException("Payment must be in Started status to fail.");
+        }
+
+        var paymentFailed = new PaymentFailed(Id, failureReason);
+        Apply(paymentFailed);
+    }
+
+    // Apply methods
+    public void Apply(PaymentStarted e)
+    {
+        Id = e.PaymentId;
+        _orderId = e.OrderId;
+        _userId = e.UserId;
+        _amount = e.Amount;
+        _status = PaymentStatus.Started;
+    }
+
+    public void Apply(PaymentProcessed e)
+    {
+        _status = PaymentStatus.Processed;
+    }
+
+    public void Apply(PaymentFailed e)
+    {
+        _status = PaymentStatus.Failed;
+    }
+}
+
+public enum PaymentStatus
+{
+    Started,
+    Processed,
+    Failed
+}
+```
+
 
 #### Invoice
 
 **1. Business Rules**
 
-- TODO
+1. An invoice must be associated with a specific Order and User.
+2. The invoice must contain information about the items purchased (e.g., ticket details, quantities, and prices).
+3. The invoice currency must be a valid ISO currency code.
+4. The total amount on the invoice must be equal to the sum of the item prices.
+5. The invoice must be generated after the order is confirmed and the payment is successful.
 
 **2. Invariants:**
 
-- TODO
+1. The invoice ID must be unique and non-empty.
+2. The invoice status must be one of the following: Pending or Issued.
+3. The invoice must include the user's billing information (name, address, etc.).
 
 **3. Commands** 
 
 ```csharp
-public record CreateInvoice(string UserId, string OrderId, InvoiceDetails InvoiceDetails);
+public record CreateInvoice(string OrderId, List<InvoiceItem> Items, string UserId, CustomerInfo CustomerInfo);
+public record InvoiceItem(string Description, int Quantity, decimal UnitPrice);
+public record CustomerInfo(string Name, string Address, string Email);
 ```
 
 **4. Events:**
 
 ```csharp
-public record InvoiceCreated(string InvoiceId, string UserId, string OrderId, InvoiceDetails InvoiceDetails);
+public record InvoiceCreated(string InvoiceId, string OrderId, List<InvoiceItem> Items, string UserId, CustomerInfo CustomerInfo);
 ```
 
 **5. Aggregate**
 
-TODO
+```csharp
+public class Invoice
+{
+    public string Id { get; private init; }
+    public string OrderId { get; private init; }
+    public List<InvoiceItem> Items { get; private init; }
+    public decimal TotalAmount { get; private init; }
+    public string UserId { get; private init; }
+    public CustomerInfo CustomerInfo { get; private init; }
+    public bool IsPaid { get; private set; }
+
+    private Invoice() { }
+
+    public static Invoice Create(string orderId, List<InvoiceItem> items, string userId, CustomerInfo customerInfo)
+    {
+        if (string.IsNullOrEmpty(orderId)) throw new ArgumentNullException(nameof(orderId));
+        if (items == null || items.Count == 0) throw new ArgumentException("Items list must contain at least one item.", nameof(items));
+        if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+        if (customerInfo == null) throw new ArgumentNullException(nameof(customerInfo));
+
+        var totalAmount = items.Sum(item => item.Quantity * item.UnitPrice);
+
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid().ToString(),
+            OrderId = orderId,
+            Items = items,
+            TotalAmount = totalAmount,
+            UserId = userId,
+            CustomerInfo = customerInfo,
+        };
+
+        invoice.Apply(new InvoiceCreated(invoice.Id, orderId, items, userId, customerInfo));
+        return invoice;
+    }
+
+    private void Apply(InvoiceCreated e)
+    {
+        Id = e.InvoiceId;
+        OrderId = e.OrderId;
+        Items = e.Items;
+        TotalAmount = Items.Sum(item => item.Quantity * item.UnitPrice);
+        UserId = e.UserId;
+        CustomerInfo = e.CustomerInfo;
+    }
+}
+```
+
+
+**6. Event Handler**
+
+```csharp
+public class OrderEventHandler
+{
+    private readonly IDocumentSession _session;
+
+    public OrderEventHandler(IDocumentSession session)
+    {
+        _session = session;
+    }
+
+    public async Task HandleAsync(OrderCreated e)
+    {
+        var invoiceItems = e.Tickets.Select(ticket => new InvoiceItem(
+            $"{ticket.ConcertName} - {ticket.TicketType}",
+            1,
+            ticket.Price
+        )).ToList();
+
+        var invoice = Invoice.Create(e.OrderId, invoiceItems, e.UserId, e.CustomerInfo);
+
+        _session.Events.Append(invoice.Id, invoice);
+        await _session.SaveChangesAsync();
+    }
+}
+```
+
+#### Integration with External Payment Gateway
+
+The Stripe integration will be done using Stripe's official .NET SDK. We'll create a dedicated service for handling Stripe-specific operations, like creating charges, refunds, and other Stripe-related actions. This service will be called from our command handlers or application services when needed.
+
+By encapsulating Stripe-related operations in a separate service and interacting with it through command handlers or application services, we can keep our Payment aggregate clean and focused on its core business rules and invariants.
+
+
+**Command Handler:**
+
+```csharp
+using Marten;
+
+public class PaymentCommandHandler
+{
+    private readonly IDocumentSession _session;
+    private readonly StripeService _stripeService;
+
+    public PaymentCommandHandler(IDocumentSession session, StripeService stripeService)
+    {
+        _session = session;
+        _stripeService = stripeService;
+    }
+
+    public async Task Handle(ProcessPaymentCommand command)
+    {
+        // Load the payment aggregate from the event store
+        var payment = await _session.LoadAsync<Payment>(command.PaymentId);
+
+        // Call the StripeService to create a charge
+        var charge = _stripeService.CreateCharge(payment.Amount, payment.Currency, command.PaymentMethodId);
+
+        // Check if the charge was successful
+        if (charge.Status == "succeeded")
+        {
+            payment.ProcessPayment(charge.Id);
+        }
+        else
+        {
+            payment.FailPayment(charge.FailureMessage);
+        }
+
+        // Save the changes to the event store
+        _session.Store(payment);
+        await _session.SaveChangesAsync();
+    }
+}
+```
+
+Stripe integration:
+
+```csharp
+using Stripe;
+using System;
+
+public class StripeService
+{
+    public StripeService(string apiKey)
+    {
+        StripeConfiguration.ApiKey = apiKey;
+    }
+
+    public Charge CreateCharge(decimal amount, string currency, string paymentMethodId)
+    {
+        var chargeOptions = new ChargeCreateOptions
+        {
+            Amount = Convert.ToInt64(amount * 100), // Convert to the lowest currency unit (e.g., cents)
+            Currency = currency,
+            PaymentMethod = paymentMethodId,
+            Confirm = true,
+        };
+
+        var chargeService = new ChargeService();
+        var charge = chargeService.Create(chargeOptions);
+
+        return charge;
+    }
+}
+```
+
