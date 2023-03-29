@@ -2,13 +2,13 @@
 
 - [Event Sourcing on Production Workshop](#event-sourcing-on-production-workshop)
   - [Overview](#overview)
-    - [Concert Management:](#concert-management)
-    - [Shopping Cart:](#shopping-cart)
-    - [Reservation:](#reservation)
-    - [Order Management:](#order-management)
-    - [Financial Management:](#financial-management)
-    - [Ticket Management and Delivery:](#ticket-management-and-delivery)
-    - [User Management Module:](#user-management-module)
+    - [1. Concert Management:](#1-concert-management)
+    - [2. Shopping Cart:](#2-shopping-cart)
+    - [3. Reservation:](#3-reservation)
+    - [4. Order Management:](#4-order-management)
+    - [5. Financial Management:](#5-financial-management)
+    - [6. Ticket Management and Delivery:](#6-ticket-management-and-delivery)
+    - [7. User Management Module:](#7-user-management-module)
   - [Architecture](#architecture)
   - [C4 model](#c4-model)
     - [System](#system)
@@ -18,61 +18,78 @@
     - [1. Concert Management Module](#1-concert-management-module)
       - [Summary](#summary)
       - [Flow](#flow)
-      - [Concert](#concert)
+      - [Concert Aggregate](#concert-aggregate)
+      - [Concert Details Read Model](#concert-details-read-model)
+      - [Available Concerts Read Model](#available-concerts-read-model)
     - [2. Shopping Cart Module](#2-shopping-cart-module)
       - [Summary](#summary-1)
       - [Flow](#flow-1)
-      - [Shopping Cart](#shopping-cart-1)
+      - [Shopping Cart Aggregate](#shopping-cart-aggregate)
+      - [Shopping Cart Contents Read Model](#shopping-cart-contents-read-model)
+      - [Shopping Cart Summary Read Model](#shopping-cart-summary-read-model)
     - [3. Reservation Module](#3-reservation-module)
       - [Summary](#summary-2)
       - [Flow](#flow-2)
-      - [Reservation](#reservation-1)
+      - [Reservation](#reservation)
       - [Concert Availability](#concert-availability)
+      - [User Reservations Read Model](#user-reservations-read-model)
+      - [Concert Reservations Read Model](#concert-reservations-read-model)
     - [4. Order Management Module](#4-order-management-module)
       - [Summary](#summary-3)
       - [Flow](#flow-3)
-      - [Order](#order)
+      - [Order Aggregate](#order-aggregate)
+      - [User Orders Read model](#user-orders-read-model)
+      - [Order Details Read model](#order-details-read-model)
     - [5. Ticket Management And Delivery Module](#5-ticket-management-and-delivery-module)
       - [Summary](#summary-4)
       - [Flow](#flow-4)
-      - [Ticket](#ticket)
-      - [Ticket Delivery](#ticket-delivery)
+      - [Ticket Aggregate](#ticket-aggregate)
+      - [Ticket Delivery Aggregate](#ticket-delivery-aggregate)
       - [Integration with External Email Provider](#integration-with-external-email-provider)
+      - [User Tickets Read Model](#user-tickets-read-model)
+      - [Ticket Details Read Model](#ticket-details-read-model)
+      - [Concert Ticket Summary Read Model](#concert-ticket-summary-read-model)
+      - [Ticket Delivery Status Read Model](#ticket-delivery-status-read-model)
+      - [Ticket Validation Status Read Model](#ticket-validation-status-read-model)
     - [6. Payment (Bounded Context: Payments)](#6-payment-bounded-context-payments)
-    - [7. User Management Module](#7-user-management-module)
+    - [7. User Management Module](#7-user-management-module-1)
     - [8. Finance (Bounded Context: Finance)](#8-finance-bounded-context-finance)
     - [Flow](#flow-5)
       - [Payment](#payment)
       - [Invoice](#invoice)
       - [Integration with External Payment Gateway](#integration-with-external-payment-gateway)
+      - [User Payments Read Model](#user-payments-read-model)
+      - [Payment Details Read Model](#payment-details-read-model)
+      - [User Invoices Read Model](#user-invoices-read-model)
+      - [Invoice Details Read Model](#invoice-details-read-model)
 
 ## Overview
 
 Imagine you're organizing a Beyonce concert in Warsaw, and you need a system to manage every aspect of the event, from ticket reservations to financial transactions. Our system has you covered with the following modules:
 
-### [Concert Management](#concert-management-module):
+### [1. Concert Management](#concert-management-module):
     
 This module takes care of all the behind-the-scenes work that goes into planning the concert. As the organizer, you can create the concert event, set the location (Warsaw), date, and time, and even decide on the different types of tickets available (such as Regular and Golden Circle). You'll also have the power to update or cancel the concert and manage ticket pricing.
 
-### [Shopping Cart](#shopping-cart-module):
+### [2. Shopping Cart](#shopping-cart-module):
 In this module, users can collect tickets from multiple concerts in a single shopping cart. Once they're ready to checkout, they can confirm their selection and proceed with the payment. If any issues arise, like a failed payment, the system will handle the necessary compensation process.
 
-### [Reservation](#reservation-module):
+### [3. Reservation](#reservation-module):
 
 Once you have the concert details sorted, fans can start reserving their tickets through this module. They'll be able to choose from the different ticket types you've set up, and the system will make sure there aren't more reservations than available spots.
 
-### [Order Management](#order-management-module):
+### [4. Order Management](#order-management-module):
 This module coordinates the whole process of placing an order, including creating orders based on confirmed shopping carts, tracking the order status, and managing any changes or cancellations. It also ensures that the order details, such as ticket reservations and delivery methods, are properly handled.
 
-### [Financial Management](#financial-management-module):
+### [5. Financial Management](#financial-management-module):
 
 This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
 
-### [Ticket Management and Delivery](#ticket-management-module):
+### [6. Ticket Management and Delivery](#ticket-management-module):
 
 In this module, the system creates and manages tickets based on user reservations. It takes care of delivering the tickets to users via email or, if they prefer, arranging for printed tickets to be sent through courier services like FedEx.
 
-### [User Management Module](#user-management-module):
+### [7. User Management Module](#user-management-module):
 
 This module handles user registration, authentication, and role management. It enables users to create an account, log in, and perform actions based on their assigned roles, such as regular user, administrator, or concert organizer.
 
@@ -284,6 +301,7 @@ graph LR
 - **Aggregates:** `Concert`
 - **Commands:** `CreateConcert`, `UpdateConcert`, `CancelConcert`, `UpdateTicketLevels`
 - **Events:** `ConcertCreated`, `ConcertUpdated`, `ConcertCancelled`, `TicketLevelsUpdated`
+- **Read Models:** `ConcertDetails`, `AvailableConcerts`
 
 #### Flow
 
@@ -291,7 +309,7 @@ graph LR
 2. When ticket levels and pricing are updated for a concert, the UpdateTicketLevels command is sent. The command handler loads the Concert aggregate, updates the ticket levels and pricing, and applies the TicketLevelsUpdated event.
 3. When a concert is canceled, the CancelConcert command is sent. The command handler loads the Concert aggregate and cancels the concert by applying the `ConcertCancelled` event.
 
-#### Concert
+#### Concert Aggregate
 
 **1. Business Rules**    
 - A concert can be created with a specified artist, ticket levels, and pricing.
@@ -416,6 +434,116 @@ public class ConcertCommandHandler
 }
 ```
 
+#### Concert Details Read Model
+
+Display concert details for users to view and reserve tickets
+
+**View**
+
+```csharp
+public record ConcertDetails(Guid ConcertId, string ConcertName, DateTime ConcertDate, string Location, IReadOnlyList<TicketTypeInfo> TicketTypes);
+
+public record TicketTypeInfo(string TicketType, decimal Price, int AvailableTickets);
+```
+
+**Read Model**
+
+```csharp
+public class ConcertDetailsProjection : SingleStreamProjection<ConcertDetails>
+{
+    public ConcertDetailsProjection() : base(ConcertDetails.StreamIdentity)
+    {
+    }
+
+    public void Apply(ConcertDetails view, ConcertCreated @event)
+    {
+        view = new ConcertDetails(@event.ConcertId, @event.ConcertName, @event.ConcertDate, @event.Location, @event.TicketTypes);
+    }
+
+    public void Apply(ConcertDetails view, ConcertUpdated @event)
+    {
+        view = view with
+        {
+            ConcertName = @event.ConcertName,
+            ConcertDate = @event.ConcertDate,
+            Location = @event.Location,
+            TicketTypes = @event.TicketTypes
+        };
+    }
+
+    public void Apply(ConcertDetails view, TicketTypeUpdated @event)
+    {
+        var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
+            ? tt with { Price = @event.Price, AvailableTickets = @event.AvailableTickets }
+            : tt).ToList();
+
+        view = view with { TicketTypes = updatedTicketTypes };
+    }
+
+    public void Apply(ConcertDetails view, TicketReserved @event)
+    {
+        var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
+            ? tt with { AvailableTickets = tt.AvailableTickets - 1 }
+            : tt).ToList();
+
+        view = view with { TicketTypes = updatedTicketTypes };
+    }
+
+    public void Apply(ConcertDetails view, TicketReservationCancelled @event)
+    {
+        var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
+            ? tt with { AvailableTickets = tt.AvailableTickets + 1 }
+            : tt).ToList();
+
+        view = view with { TicketTypes = updatedTicketTypes };
+    }
+}
+```
+
+#### Available Concerts Read Model
+
+Display a list of available concerts for users to browse
+
+**View**
+
+```csharp
+public record AvailableConcert(Guid ConcertId, string ConcertName, DateTime ConcertDate, string Location);
+
+public record AvailableConcerts(IReadOnlyList<AvailableConcert> Concerts);
+```
+
+**Read Model**
+
+```csharp
+public class AvailableConcertsProjection : MultiStreamProjection<AvailableConcerts>
+{
+    public AvailableConcertsProjection() : base(AvailableConcerts.StreamIdentity)
+    {
+    }
+
+    public void Apply(AvailableConcerts view, ConcertCreated @event)
+    {
+        var newConcert = new AvailableConcert(@event.ConcertId, @event.ConcertName, @event.ConcertDate, @event.Location);
+        view = view with { Concerts = view.Concerts.Append(newConcert).ToList() };
+    }
+
+    public void Apply(AvailableConcerts view, ConcertUpdated @event)
+    {
+        var updatedConcerts = view.Concerts.Select(c => c.ConcertId == @event.ConcertId
+            ? c with { ConcertName = @event.ConcertName, ConcertDate = @event.ConcertDate, Location = @event.Location }
+            : c).ToList();
+
+        view = view with { Concerts = updatedConcerts };
+    }
+
+    public void Apply(AvailableConcerts view, ConcertCancelled @event)
+    {
+        var updatedConcerts = view.Concerts.Where(c => c.ConcertId != @event.ConcertId).ToList();
+        view = view with { Concerts = updatedConcerts };
+    }
+}
+```
+
 <a href='#shopping-cart-module' id='shopping-cart-module' class='anchor' aria-hidden='true'></a>
 
 ### 2. Shopping Cart Module
@@ -425,6 +553,7 @@ public class ConcertCommandHandler
 - **Aggregates:** `ShoppingCart`
 - **Commands:** `CreateCart`, `AddTicketToCart`, `RemoveTicketFromCart`, `ClearCart`, `ConfirmCart`
 - **Events:** `CartCreated`, `TicketAddedToCart`, `TicketRemovedFromCart`, `CartCleared`, `CartConfirmed`
+- **Read Models:** `ShoppingCartContents`, `ShoppingCartSummary`
 
 #### Flow
 
@@ -435,7 +564,7 @@ public class ConcertCommandHandler
 5. The user can confirm their shopping cart, triggering the reservation of tickets and the payment process.
 6. The user can cancel their shopping cart, clearing the cart and allowing for a new selection.
 
-#### Shopping Cart
+#### Shopping Cart Aggregate
 
 **1. Business Rules**    
 - A user can have only one active shopping cart. The cart's ID is the same as the user's ID.
@@ -656,6 +785,117 @@ public class ShoppingCartCommandHandler
 
 ```
 
+#### Shopping Cart Contents Read Model
+
+Display the contents of a user's shopping cart
+
+**View**
+
+```csharp
+public record ShoppingCartItem(Guid ConcertId, string ConcertName, string TicketType, int Quantity, decimal Price);
+
+public record ShoppingCartContents(Guid UserId, IReadOnlyList<ShoppingCartItem> Items);
+```
+
+**Read Model**
+
+```csharp
+public class ShoppingCartContentsProjection : SingleStreamProjection<ShoppingCartContents>
+{
+    public ShoppingCartContentsProjection() : base(ShoppingCartContents.StreamIdentity)
+    {
+    }
+
+    public void Apply(ShoppingCartContents view, ShoppingCartItemAdded @event)
+    {
+        var newItem = new ShoppingCartItem(@event.ConcertId, @event.ConcertName, @event.TicketType, @event.Quantity, @event.Price);
+        view = view with { Items = view.Items.Append(newItem).ToList() };
+    }
+
+    public void Apply(ShoppingCartContents view, ShoppingCartItemRemoved @event)
+    {
+        var updatedItems = view.Items.Where(item => item.ConcertId != @event.ConcertId || item.TicketType != @event.TicketType).ToList();
+        view = view with { Items = updatedItems };
+    }
+
+    public void Apply(ShoppingCartContents view, ShoppingCartItemUpdated @event)
+    {
+        var updatedItems = view.Items.Select(item =>
+            item.ConcertId == @event.ConcertId && item.TicketType == @event.TicketType
+                ? item with { Quantity = @event.NewQuantity }
+                : item).ToList();
+
+        view = view with { Items = updatedItems };
+    }
+
+    public void Apply(ShoppingCartContents view, ShoppingCartCleared @event)
+    {
+        view = view with { Items = new List<ShoppingCartItem>() };
+    }
+}
+```
+
+#### Shopping Cart Summary Read Model
+
+Display a summary of a user's shopping cart
+
+**View**
+
+```csharp
+public record ShoppingCartSummary(Guid UserId, int TotalItems, decimal TotalPrice);
+```
+
+**Read Model**
+
+```csharp
+public class ShoppingCartSummaryProjection : SingleStreamProjection<ShoppingCartSummary>
+{
+    public ShoppingCartSummaryProjection() : base(ShoppingCartSummary.StreamIdentity)
+    {
+    }
+
+    public void Apply(ShoppingCartSummary view, ShoppingCartItemAdded @event)
+    {
+        view = view with
+        {
+            TotalItems = view.TotalItems + @event.Quantity,
+            TotalPrice = view.TotalPrice + (@event.Price * @event.Quantity)
+        };
+    }
+
+    public void Apply(ShoppingCartSummary view, ShoppingCartItemRemoved @event)
+    {
+        int removedQuantity = view.Items.FirstOrDefault(item => item.ConcertId == @event.ConcertId && item.TicketType == @event.TicketType)?.Quantity ?? 0;
+        decimal removedPrice = view.Items.FirstOrDefault(item => item.ConcertId == @event.ConcertId && item.TicketType == @event.TicketType)?.Price ?? 0;
+
+        view = view with
+        {
+            TotalItems = view.TotalItems - removedQuantity,
+            TotalPrice = view.TotalPrice - (removedPrice * removedQuantity)
+        };
+    }
+
+    public void Apply(ShoppingCartSummary view, ShoppingCartItemUpdated @event)
+    {
+        var currentItem = view.Items.FirstOrDefault(item => item.ConcertId == @event.ConcertId && item.TicketType == @event.TicketType);
+        int oldQuantity = currentItem?.Quantity ?? 0;
+        decimal itemPrice = currentItem?.Price ?? 0;
+        int newQuantity = @event.NewQuantity;
+
+        view = view with
+        {
+            TotalItems = view.TotalItems - oldQuantity + newQuantity,
+            TotalPrice = view.TotalPrice - (itemPrice * oldQuantity) + (itemPrice * newQuantity)
+        };
+    }
+
+    public void Apply(ShoppingCartSummary view, ShoppingCartCleared @event)
+    {
+        view = view with { TotalItems = 0, TotalPrice = 0 };
+    }
+}
+```
+
 <a href='#reservation-module' id='reservation-module' class='anchor' aria-hidden='true'></a>
 
 ### 3. Reservation Module
@@ -665,6 +905,7 @@ public class ShoppingCartCommandHandler
 - **Aggregates:** `Reservation`, `ConcertTicketsAvailability`
 - **Commands:** `CreateReservation`, `CancelReservation`, `ExpireReservation`
 - **Events:** `ReservationCreated`, `ReservationCancelled`, `ReservationExpired`
+- **Read Models:** `UserReservations`, `ConcertReservations`
 
 #### Flow
 
@@ -930,6 +1171,73 @@ public class ConcertEventHandler
 
 <a href='#order-management-module' id='orders-module' class='anchor' aria-hidden='true'></a>
 
+#### User Reservations Read Model
+
+Display a list of reservations made by a user
+
+**View**
+
+```csharp
+public record UserReservations(Guid UserId, IReadOnlyList<Reservation> Reservations);
+
+public record Reservation(Guid ConcertId, string ConcertName, DateTime ConcertDate, string TicketType, int ReservedTickets);
+```
+
+**Read Model**
+
+```csharp
+public class UserReservationsProjection : SingleStreamProjection<UserReservations>
+{
+    public UserReservationsProjection() : base(UserReservations.StreamIdentity)
+    {
+    }
+
+    public void Apply(UserReservations view, ReservationMade @event)
+    {
+        var reservation = new Reservation(@event.ConcertId, @event.ConcertName, @event.ConcertDate, @event.TicketType, @event.Quantity);
+        view = view with { Reservations = view.Reservations.Append(reservation).ToList() };
+    }
+
+    public void Apply(UserReservations view, ReservationCancelled @event)
+    {
+        view = view with { Reservations = view.Reservations.Where(r => r.ConcertId != @event.ConcertId || r.TicketType != @event.TicketType).ToList() };
+    }
+}
+```
+
+#### Concert Reservations Read Model
+
+Display a summary of reservations for a specific concert
+
+**View**
+
+```csharp
+public record ConcertReservations(Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<ReservationSummary> Reservations);
+
+public record ReservationSummary(Guid UserId, string UserName, string TicketType, int ReservedTickets);
+```
+
+**Read Model**
+
+```csharp
+public class ConcertReservationsProjection : SingleStreamProjection<ConcertReservations>
+{
+    public ConcertReservationsProjection() : base(ConcertReservations.StreamIdentity)
+    {
+    }
+
+    public void Apply(ConcertReservations view, ReservationMade @event)
+    {
+        var reservationSummary = new ReservationSummary(@event.UserId, @event.UserName, @event.TicketType, @event.Quantity);
+        view = view with { Reservations = view.Reservations.Append(reservationSummary).ToList() };
+    }
+
+    public void Apply(ConcertReservations view, ReservationCancelled @event)
+    {
+        view = view with { Reservations = view.Reservations.Where(r => r.UserId != @event.UserId || r.TicketType != @event.TicketType).ToList() };
+    }
+}
+```
 
 ### 4. Order Management Module
 
@@ -938,6 +1246,7 @@ public class ConcertEventHandler
 - **Aggregates:** `TicketOrder`
 - **Commands:** `CreateOrder`, `CompleteOrder`, `CancelOrder`, `CompensateOrder`
 - **Events:** `OrderCreated`, `OrderCompleted`, `OrderCancelled`
+- **Read Models:** `UserOrders`, `OrderDetails`
 
 #### Flow
 
@@ -955,7 +1264,7 @@ The Order represents a confirmed purchase made by a user. It is created when the
 
 The relationships between the Order and other entities ensure a smooth flow of information and actions throughout the ticket purchasing process. The Order serves as a central point connecting the ShoppingCart, Reservations, Tickets, Payment, and Invoice, providing a comprehensive view of the user's purchase.
 
-#### Order
+#### Order Aggregate
 
 **1. Business Rules**
 
@@ -1213,6 +1522,108 @@ public class OrderCommandHandler
 
 ```
 
+#### User Orders Read model
+
+Display a list of orders made by a user
+
+**View**
+
+```csharp
+public record UserOrders(Guid UserId, IReadOnlyList<OrderSummary> Orders);
+
+public record OrderSummary(Guid OrderId, Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status);
+
+public record OrderItem(string TicketType, int Quantity, decimal Price);
+
+public enum OrderStatus
+{
+    Created,
+    Confirmed,
+    Cancelled
+}
+```
+
+**Read Model**
+
+```csharp
+public class UserOrdersProjection : SingleStreamProjection<UserOrders>
+{
+    public UserOrdersProjection() : base(UserOrders.StreamIdentity)
+    {
+    }
+
+    public void Apply(UserOrders view, OrderCreated @event)
+    {
+        var orderItems = @event.Tickets.Select(t => new OrderItem(t.TicketType, t.Quantity, t.Price)).ToList();
+        var orderSummary = new OrderSummary(@event.OrderId, @event.ConcertId, @event.ConcertName, @event.ConcertDate, orderItems, OrderStatus.Created);
+        view = view with { Orders = view.Orders.Append(orderSummary).ToList() };
+    }
+
+    public void Apply(UserOrders view, OrderConfirmed @event)
+    {
+        view = view with
+        {
+            Orders = view.Orders.Select(o => o.OrderId == @event.OrderId ? o with { Status = OrderStatus.Confirmed } : o).ToList()
+        };
+    }
+
+    public void Apply(UserOrders view, OrderCancelled @event)
+    {
+        view = view with
+        {
+            Orders = view.Orders.Select(o => o.OrderId == @event.OrderId ? o with { Status = OrderStatus.Cancelled } : o).ToList()
+        };
+    }
+}
+```
+
+#### Order Details Read model
+
+Use case: Display the details of a specific order for a user
+
+**View**
+
+```csharp
+public record OrderDetails(Guid OrderId, Guid UserId, Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status, decimal TotalAmount);
+
+public record OrderItem(string TicketType, int Quantity, decimal Price);
+
+public enum OrderStatus
+{
+    Created,
+    Confirmed,
+    Cancelled
+}
+```
+
+**Read Model**
+
+```csharp
+public class OrderDetailsProjection : SingleStreamProjection<OrderDetails>
+{
+    public OrderDetailsProjection() : base(OrderDetails.StreamIdentity)
+    {
+    }
+
+    public void Apply(OrderDetails view, OrderCreated @event)
+    {
+        var orderItems = @event.Tickets.Select(t => new OrderItem(t.TicketType, t.Quantity, t.Price)).ToList();
+        decimal totalAmount = orderItems.Sum(item => item.Quantity * item.Price);
+        view = new OrderDetails(@event.OrderId, @event.UserId, @event.ConcertId, @event.ConcertName, @event.ConcertDate, orderItems, OrderStatus.Created, totalAmount);
+    }
+
+    public void Apply(OrderDetails view, OrderConfirmed @event)
+    {
+        view = view with { Status = OrderStatus.Confirmed };
+    }
+
+    public void Apply(OrderDetails view, OrderCancelled @event)
+    {
+        view = view with { Status = OrderStatus.Cancelled };
+    }
+}
+```
+
 **7. Event Handlers**
 
 Shopping Cart Events:
@@ -1385,6 +1796,7 @@ public class PaymentSucceededHandler
 - **Aggregates:** `Ticket`, `TicketDelivery`
 - **Commands:** `PrepareTicketDelivery`, `DeliverOnlineTicket`, `DeliverPrintedTicket`, `ValidateTicket`
 - **Events:** `TicketCreated`, `TicketDeliveryPrepared`, `OnlineTicketDelivered`, `PrintedTicketDelivered`, `TicketValidated`, `TicketValidationFailed`
+- **Read Models:** `UserTickets`, `TicketDetails`, `ConcertTicketSummary`, `TicketDeliveryStatus`, `TicketValidationStatus`
 
 #### Flow
 
@@ -1399,7 +1811,7 @@ The Ticket Management module will integrate with an external email service like 
 Similarly, the Ticket Management module will integrate with courier services to send printed tickets. When the SendTicketByCourier command is executed, it will interact with the courier service's API to initiate the shipping process and obtain tracking information.
 
 
-#### Ticket
+#### Ticket Aggregate
 
 **1. Business Rules**
 
@@ -1512,7 +1924,7 @@ public class TicketEventHandler
 }
 ```
 
-#### Ticket Delivery
+#### Ticket Delivery Aggregate
 
 **1. Business Rules**
 
@@ -1670,11 +2082,273 @@ services.AddMartenAsyncProjection<TicketEmailSent, TicketEmailSentHandler>();
 
 In this example, we are using the `IMailgunClient` from the `Mailgun.Extensions.DependencyInjection` package to send emails. The event handler listens for the TicketEmailSent event and sends an email to the user with their ticket information. The idempotency key is set to a unique value based on the ticket ID to ensure that the email is sent only once.
 
+#### User Tickets Read Model
+
+Display a list of tickets owned by a user.
+
+**View**
+
+```csharp
+public record UserTickets(Guid UserId, IReadOnlyList<TicketSummary> Tickets);
+
+public record TicketSummary(Guid TicketId, Guid ConcertId, string ConcertName, DateTime ConcertDate, string TicketType, decimal TicketPrice);
+```
+
+**Projection**
+
+```csharp
+public class UserTicketsProjection : SingleStreamProjection<UserTickets>
+{
+    public UserTicketsProjection() : base(UserTickets.StreamIdentity)
+    {
+    }
+
+    public void Apply(UserTickets view, TicketCreated @event)
+    {
+        view.Tickets.Add(new TicketDetails
+        {
+            TicketId = @event.TicketId,
+            ConcertId = @event.ConcertId,
+            ConcertName = @event.ConcertName,
+            Date = @event.Date,
+            Venue = @event.Venue,
+            TicketType = @event.TicketType,
+            Price = @event.Price,
+            Status = TicketStatus.Active
+        });
+    }
+
+    public void Apply(UserTickets view, TicketEmailSent @event)
+    {
+        var ticket = view.Tickets.Find(t => t.TicketId == @event.TicketId);
+        if (ticket != null)
+        {
+            ticket.EmailSent = true;
+        }
+    }
+
+    public void Apply(UserTickets view, TicketPrintedAndSent @event)
+    {
+        var ticket = view.Tickets.Find(t => t.TicketId == @event.TicketId);
+        if (ticket != null)
+        {
+            ticket.PrintedAndSent = true;
+        }
+    }
+
+    public void Apply(UserTickets view, TicketCancelled @event)
+    {
+        var ticket = view.Tickets.Find(t => t.TicketId == @event.TicketId);
+        if (ticket != null)
+        {
+            ticket.Status = TicketStatus.Cancelled;
+        }
+    }
+}
+```
+
+#### Ticket Details Read Model
+
+Display the details of a specific ticket for a user.
+
+**View**
+
+```csharp
+public record TicketDetails(Guid TicketId, Guid UserId, Guid ConcertId, string ConcertName, DateTime ConcertDate, string VenueName, string TicketType, decimal TicketPrice, string Barcode, DateTimeOffset CreatedAt);
+```
+
+**Projection**
+
+```csharp
+public class TicketDetailsProjection : SingleStreamProjection<TicketDetails>
+{
+    public TicketDetailsProjection() : base(TicketDetails.StreamIdentity)
+    {
+    }
+
+    public void Apply(TicketDetails view, TicketCreated @event)
+    {
+        view.TicketId = @event.TicketId;
+        view.ConcertId = @event.ConcertId;
+        view.ConcertName = @event.ConcertName;
+        view.Date = @event.Date;
+        view.Venue = @event.Venue;
+        view.TicketType = @event.TicketType;
+        view.Price = @event.Price;
+        view.Status = TicketStatus.Active;
+    }
+
+    public void Apply(TicketDetails view, TicketCancelled @event)
+    {
+        view.Status = TicketStatus.Cancelled;
+    }
+}
+```
+
+#### Concert Ticket Summary Read Model
+
+Display a summary of tickets for a specific concert.
+
+**View**
+
+```csharp
+public record ConcertTicketSummary(Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<TicketTypeSummary> TicketTypes);
+
+public record TicketTypeSummary(string TicketType, int TotalTickets, int AvailableTickets, int ReservedTickets, int SoldTickets);
+```
+
+**Projection**
+
+```csharp
+public class ConcertTicketSummaryProjection : SingleStreamProjection<ConcertTicketSummary>
+{
+    public ConcertTicketSummaryProjection() : base(ConcertTicketSummary.StreamIdentity)
+    {
+    }
+
+    public void Apply(ConcertTicketSummary view, ConcertCreated @event)
+    {
+        view.ConcertId = @event.ConcertId;
+        view.ConcertName = @event.ConcertName;
+        view.ConcertDate = @event.ConcertDate;
+        view.TicketTypes = new List<TicketTypeSummary>();
+    }
+
+    public void Apply(ConcertTicketSummary view, TicketTypeCreated @event)
+    {
+        var ticketTypeSummary = new TicketTypeSummary(
+            @event.TicketType,
+            @event.TotalTickets,
+            @event.TotalTickets, // Initially, all tickets are available
+            0, // No tickets reserved initially
+            0  // No tickets sold initially
+        );
+
+        view.TicketTypes.Add(ticketTypeSummary);
+    }
+
+    public void Apply(ConcertTicketSummary view, TicketsReserved @event)
+    {
+        var ticketTypeSummary = view.TicketTypes.Single(t => t.TicketType == @event.TicketType);
+        ticketTypeSummary.AvailableTickets -= @event.Quantity;
+        ticketTypeSummary.ReservedTickets += @event.Quantity;
+    }
+
+    public void Apply(ConcertTicketSummary view, TicketsPurchased @event)
+    {
+        var ticketTypeSummary = view.TicketTypes.Single(t => t.TicketType == @event.TicketType);
+        ticketTypeSummary.ReservedTickets -= @event.Quantity;
+        ticketTypeSummary.SoldTickets += @event.Quantity;
+    }
+
+    public void Apply(ConcertTicketSummary view, TicketsReservationCancelled @event)
+    {
+        var ticketTypeSummary = view.TicketTypes.Single(t => t.TicketType == @event.TicketType);
+        ticketTypeSummary.AvailableTickets += @event.Quantity;
+        ticketTypeSummary.ReservedTickets -= @event.Quantity;
+    }
+}
+
+```
+
+#### Ticket Delivery Status Read Model
+
+Display the delivery status of a specific ticket for a user.
+
+**View**
+
+```csharp
+public record TicketDeliveryStatus(Guid TicketId, Guid UserId, DeliveryMethod DeliveryMethod, string DeliveryStatus, string TrackingNumber, DateTimeOffset? DeliveryDate);
+```
+
+**Projection**
+
+```csharp
+public class TicketDeliveryStatusProjection : SingleStreamProjection<TicketDeliveryStatus>
+{
+    public TicketDeliveryStatusProjection() : base(TicketDeliveryStatus.StreamIdentity)
+    {
+    }
+
+    public void Apply(TicketDeliveryStatus view, TicketCreated @event)
+    {
+        view.TicketId = @event.TicketId;
+        view.UserId = @event.UserId;
+        view.DeliveryMethod = @event.DeliveryMethod;
+        view.DeliveryStatus = "Not yet delivered";
+        view.TrackingNumber = null;
+        view.DeliveryDate = null;
+    }
+
+    public void Apply(TicketDeliveryStatus view, TicketDeliveryInitiated @event)
+    {
+        view.DeliveryStatus = "In progress";
+        view.TrackingNumber = @event.TrackingNumber;
+    }
+
+    public void Apply(TicketDeliveryStatus view, TicketDelivered @event)
+    {
+        view.DeliveryStatus = "Delivered";
+        view.DeliveryDate = @event.DeliveryDate;
+    }
+
+    public void Apply(TicketDeliveryStatus view, TicketDeliveryFailed @event)
+    {
+        view.DeliveryStatus = "Failed";
+    }
+}
+
+```
+
+
+#### Ticket Validation Status Read Model
+
+Display the validation status of a specific ticket at the concert venue.
+
+**View**
+
+```csharp
+public record TicketValidationStatus(Guid TicketId, Guid ConcertId, bool IsValid, string ValidationMessage);
+```
+
+**Projection**
+
+```csharp
+public class TicketValidationStatusProjection : SingleStreamProjection<TicketValidationStatus>
+{
+    public TicketValidationStatusProjection() : base(TicketValidationStatus.StreamIdentity)
+    {
+    }
+
+    public void Apply(TicketValidationStatus view, TicketCreated @event)
+    {
+        view.TicketId = @event.TicketId;
+        view.ConcertId = @event.ConcertId;
+        view.IsValid = false;
+        view.ValidationMessage = "Not validated";
+    }
+
+    public void Apply(TicketValidationStatus view, TicketValidated @event)
+    {
+        view.IsValid = true;
+        view.ValidationMessage = "Validated";
+    }
+
+    public void Apply(TicketValidationStatus view, TicketValidationFailed @event)
+    {
+        view.IsValid = false;
+        view.ValidationMessage = @event.Reason;
+    }
+}
+
+```
+
 ### 6. Payment (Bounded Context: Payments)
 
 - **Aggregates:** `Payment`
 - **Commands:** : `InitiatePayment`, `ConfirmPayment`, `RefundPayment`
 - **Events:** `PaymentInitiated`, `PaymentConfirmed`, `PaymentRefunded`
+- **Read Models:** `UserPayments`, `PaymentDetails`, `UserInvoices`, `InvoiceDetails`
 
 <a href='#user-management-module' id='user-management-module' class='anchor' aria-hidden='true'></a>
 
@@ -1994,3 +2668,139 @@ public class StripeService
 }
 ```
 
+#### User Payments Read Model
+
+Display a list of payments made by a user
+
+**View**
+
+```csharp
+public record UserPayment(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
+
+public record UserPayments(Guid UserId, IReadOnlyList<UserPayment> Payments);
+```
+
+**Projection**
+
+```csharp
+public class UserPaymentsProjection : SingleStreamProjection<UserPayments>
+{
+    public UserPaymentsProjection() : base(UserPayments.StreamIdentity)
+    {
+    }
+
+    public void Apply(UserPayments view, PaymentCreated @event)
+    {
+        var payment = new UserPayment(@event.PaymentId, @event.UserId, @event.OrderId, @event.Amount, PaymentStatus.Pending, @event.CreatedAt);
+
+        view.Payments = view.Payments.Append(payment).ToList();
+    }
+
+    public void Apply(UserPayments view, PaymentSucceeded @event)
+    {
+        var payment = view.Payments.FirstOrDefault(p => p.PaymentId == @event.PaymentId);
+        if (payment is not null)
+        {
+            var updatedPayment = payment with { Status = PaymentStatus.Successful };
+            view.Payments = view.Payments.Remove(payment).Append(updatedPayment).ToList();
+        }
+    }
+
+    public void Apply(UserPayments view, PaymentFailed @event)
+    {
+        var payment = view.Payments.FirstOrDefault(p => p.PaymentId == @event.PaymentId);
+        if (payment is not null)
+        {
+            var updatedPayment = payment with { Status = PaymentStatus.Failed };
+            view.Payments = view.Payments.Remove(payment).Append(updatedPayment).ToList();
+        }
+    }
+}
+```
+
+#### Payment Details Read Model
+
+Display the details of a specific payment for a user
+
+**View**
+
+```csharp
+public record PaymentDetails(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate, string StripePaymentId);
+```
+
+**Projection**
+
+```csharp
+```
+
+#### User Invoices Read Model
+
+Display a list of invoices for a user
+
+**View**
+
+```csharp
+public record UserPayment(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
+
+public record UserPayments(Guid UserId, IReadOnlyList<UserPayment> Payments);
+```
+
+**Projection**
+
+```csharp
+public class PaymentDetailsProjection : SingleStreamProjection<PaymentDetails>
+{
+    public PaymentDetailsProjection() : base(PaymentDetails.StreamIdentity)
+    {
+    }
+
+    public void Apply(PaymentDetails view, PaymentCreated @event)
+    {
+        view = new PaymentDetails(@event.PaymentId, @event.UserId, @event.OrderId, @event.Amount, PaymentStatus.Pending, @event.CreatedAt, @event.StripePaymentId);
+    }
+
+    public void Apply(PaymentDetails view, PaymentSucceeded @event)
+    {
+        if (view.PaymentId == @event.PaymentId)
+        {
+            view = view with { Status = PaymentStatus.Successful };
+        }
+    }
+
+    public void Apply(PaymentDetails view, PaymentFailed @event)
+    {
+        if (view.PaymentId == @event.PaymentId)
+        {
+            view = view with { Status = PaymentStatus.Failed };
+        }
+    }
+}
+```
+
+#### Invoice Details Read Model
+
+Display the details of a specific invoice for a user
+
+**View**
+
+```csharp
+public record InvoiceDetails(Guid InvoiceId, Guid UserId, Guid OrderId, decimal Amount, DateTimeOffset InvoiceDate, IReadOnlyList<InvoiceItem> Items);
+
+public record InvoiceItem(string Description, int Quantity, decimal Price);
+```
+
+**Projection**
+
+```csharp
+public class InvoiceDetailsProjection : SingleStreamProjection<InvoiceDetails>
+{
+    public InvoiceDetailsProjection() : base(InvoiceDetails.StreamIdentity)
+    {
+    }
+
+    public void Apply(InvoiceDetails view, InvoiceCreated @event)
+    {
+        view = new InvoiceDetails(@event.InvoiceId, @event.UserId, @event.OrderId, @event.Amount, @event.CreatedAt, @event.Items);
+    }
+}
+```
