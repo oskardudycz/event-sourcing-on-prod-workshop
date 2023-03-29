@@ -66,64 +66,164 @@ In summary, the Concert Management System's architecture is modular, event-drive
 
 ```mermaid
 graph LR
-  User(User) -- Uses --> ConcertSystem(Concert Management System)
-  ConcertSystem -- Integrates --> PaymentGateway(Payment Gateway)
+    User((User)) -->|Use| ConcertSystem((Concert Ticketing System))
+    Organizer((Organizer)) -->|Manage| ConcertSystem
+    ConcertSystem -->|Send Email| Mailgun((Mailgun))
+    ConcertSystem -->|Ship Tickets| FedEx((FedEx))
+    ConcertSystem -->|Process Payments| Stripe((Stripe))
+
 ```
 
 ### Container
 
 ```mermaid
 graph LR
-  ConcertSystem(Concert Management System)
-  subgraph Concert Management
-    ConcertModule(Concert Module)
-  end
-  subgraph Reservation
-    ReservationModule(Reservation Module)
-  end
-  subgraph Finance
-    FinanceModule(Finance Module)
-  end
-  subgraph ShoppingCart
-    ShoppingCartModule(Shopping Cart Module)
-  end
-  subgraph UserManagement
-    UserModule(User Management Module)
-  end
-  ConcertSystem --> ConcertModule
-  ConcertSystem --> ReservationModule
-  ConcertSystem --> FinanceModule
-  ConcertSystem --> ShoppingCartModule
-  ConcertSystem --> UserModule
+  A[User Interface] --> B[Reservation Module]
+  A --> C[Concert Management Module]
+  A --> D[Shopping Cart Module]
+  A --> E[Financial Management Module]
+  A --> F[Ticket Management Module]
+  A --> G[Order Module]
+  A --> H[User Management Module]
+  B --> I[Event Store]
+  C --> I
+  D --> I
+  E --> I
+  F --> I
+  G --> I
+  H --> I
+  F --> J[Mailgun]
+  F --> K[FedEx]
+  E --> L[Stripe]
+
 ```
 
 ### Component
 
 ```mermaid
 graph LR
-  subgraph Concert Module
-    ConcertAgg(Concert Aggregate)
-    ConcertCmdHandler(Concert Command Handler)
-    ConcertEventHandler(Concert Event Handler)
-  end
-  subgraph Reservation Module
-    ReservationAgg(Reservation Aggregate)
-    ConcertTicketsAvailabilityAgg(Concert Tickets Availability Aggregate)
-    ReservationCmdHandler(Reservation Command Handler)
-  end
-  subgraph Finance Module
-    FinanceAgg(Finance Aggregate)
-    InvoiceAgg(Invoice Aggregate)
-    FinanceCmdHandler(Finance Command Handler)
-  end
-  subgraph ShoppingCart Module
-    ShoppingCartAgg(Shopping Cart Aggregate)
-    ShoppingCartCmdHandler(Shopping Cart Command Handler)
-  end
-  subgraph User Management Module
-    UserAgg(User Aggregate)
-    UserCmdHandler(User Command Handler)
-  end
+  A[User Interface] --> B[Reservation Module]
+  B --> D[Shopping Cart Module]
+  D --> E[Financial Management Module]
+  D --> F[Order Module]
+  E --> F
+  F --> G[Ticket Management Module]
+  G --> H[Ticket Delivery Module]
+  A --> I[Concert Management Module]
+  A --> J[User Management Module]
+  I --> B
+  J --> B
+  B --> K[Event Store]
+  D --> K
+  E --> K
+  F --> K
+  G --> K
+  H --> K
+  I --> K
+  J --> K
+  H --> L[Mailgun]
+  H --> M[FedEx]
+  E --> N[Stripe]
+  K -.-> B
+  K -.-> D
+  K -.-> E
+  K -.-> F
+  K -.-> G
+  K -.-> H
+  K -.-> I
+  K -.-> J
+  D -- ShoppingCartConfirmed --> F
+  E -- PaymentSucceeded --> F
+  F -- OrderCreated --> B
+  F -- OrderCreated --> E
+  F -- OrderConfirmed --> G
+  G -- TicketCreated --> H
+
+```
+
+Sequence diagram with the flow:
+
+```mermaid
+sequenceDiagram
+    participant UI as User Interface
+    participant R as Reservation Module
+    participant S as Shopping Cart Module
+    participant F as Financial Management Module
+    participant O as Order Module
+    participant T as Ticket Management and Delivery Module
+    participant SP as Stripe Payment
+    participant MG as Mailgun
+    participant FE as FedEx
+    participant CV as Concert Venue
+
+    UI->>R: ReserveTickets
+    R->>R: CreateReservation
+    R-->>UI: ReservationCreated
+    UI->>S: AddTicketsToCart
+    S->>S: AddTickets
+    S-->>UI: TicketsAdded
+    UI->>S: ConfirmShoppingCart
+    S->>S: Confirm
+    S-->>UI: ShoppingCartConfirmed
+    S->>O: CreateOrder
+    O->>O: Create
+    O-->>UI: OrderCreated
+    UI->>F: InitiatePayment
+    F->>SP: ProcessPayment
+    SP-->>F: PaymentSucceeded
+    F->>O: ConfirmOrder
+    O->>O: Confirm
+    O-->>UI: OrderConfirmed
+    O->>R: ReserveTicketsForOrder
+    R->>R: ConfirmReservation
+    R-->>UI: ReservationConfirmed
+    O->>T: CreateTicket
+    T->>T: Create
+    T-->>UI: TicketCreated
+    T->>T: DeliverTicket
+    T->>MG: SendEmail
+    MG-->>T: EmailSent
+    T->>FE: SendViaCourier
+    FE-->>T: CourierDelivery
+    T-->>UI: TicketDelivered
+    UI->>T: ValidateTicket
+    T->>CV: CheckTicket
+    CV-->>T: ValidationResult
+    T-->>UI: ValidationResult
+
+```
+
+Activity diagram showing flow:
+
+```mermaid
+graph LR
+    A[Start] --> B[Reserve Tickets]
+    B --> C[Add Tickets to Shopping Cart]
+    C --> D[Confirm Shopping Cart]
+    D --> E[Create Order]
+    E --> F[Initiate Payment]
+    F --> G[Payment Succeeded]
+    G --> H[Confirm Order]
+    H --> I[Reserve Tickets for Order]
+    I --> J[Reservation Confirmed]
+    J --> K[Create Ticket]
+    K --> L[Deliver Ticket]
+    L --> M[Send Email]
+    M --> N[Email Sent]
+    N --> O[Courier Delivery]
+    O --> P[Ticket Delivered]
+    P --> Q[Validate Ticket]
+    Q --> R[End]
+
+    F -->|Payment Failed| S[Cancel Order]
+    S --> T[End]
+
+    I -->|Reservation Failed| U[Cancel Order]
+    U --> V[End]
+
+    L -->|Delivery Failed| W[Compensate Ticket Creation]
+    W -->|Retry Delivery| L
+
 ```
 
 
@@ -1447,6 +1547,68 @@ public class TicketDeliveryEventHandler
     }
 }
 ```
+
+#### Integration with External Email Provider
+
+To implement the event handler that listens to TicketEmailSent event and sends an email using `Mailgun`, first, you need to install the `Mailgun.Extensions.DependencyInjection` NuGet package. Then, you can create a class named `TicketEmailSentHandler`:
+
+```csharp
+using System.Threading.Tasks;
+using Mailgun.Core.Messages;
+using Mailgun.Extensions.DependencyInjection;
+using Mailgun.Webhooks.Events;
+using Marten.Events.Projections.Async;
+using Microsoft.Extensions.Logging;
+
+public class TicketEmailSentHandler : IProjection<TicketEmailSent>
+{
+    private readonly IMailgunClient _mailgunClient;
+    private readonly ILogger<TicketEmailSentHandler> _logger;
+
+    public TicketEmailSentHandler(IMailgunClient mailgunClient, ILogger<TicketEmailSentHandler> logger)
+    {
+        _mailgunClient = mailgunClient;
+        _logger = logger;
+    }
+
+    public async Task ApplyAsync(TicketEmailSent @event, IAsyncProjectionContext context)
+    {
+        var idempotencyKey = $"ticket-email-{@event.TicketId}";
+
+        var message = new SendMessage
+        {
+            From = "noreply@example.com",
+            To = @event.UserEmail,
+            Subject = "Your Ticket",
+            Text = $"Hello, here is your ticket for the concert: {@event.TicketUrl}"
+        };
+
+        var requestOptions = new RequestOptions
+        {
+            IdempotencyKey = idempotencyKey
+        };
+
+        try
+        {
+            var response = await _mailgunClient.Messages.SendMessageAsync(message, requestOptions);
+            _logger.LogInformation($"Email sent successfully to {@event.UserEmail}, messageId: {response.Id}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to send email to {@event.UserEmail}");
+        }
+    }
+}
+```
+
+Don't forget to register the event handler in your application's dependency injection container:
+
+```csharp
+services.AddMailgun(Configuration.GetSection("Mailgun"));
+services.AddMartenAsyncProjection<TicketEmailSent, TicketEmailSentHandler>();
+```
+
+In this example, we are using the `IMailgunClient` from the `Mailgun.Extensions.DependencyInjection` package to send emails. The event handler listens for the TicketEmailSent event and sends an email to the user with their ticket information. The idempotency key is set to a unique value based on the ticket ID to ensure that the email is sent only once.
 
 ### 6. Payment (Bounded Context: Payments)
 
