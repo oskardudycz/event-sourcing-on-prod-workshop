@@ -1,7 +1,7 @@
 # Event Sourcing on Production Workshop
 
 - [Event Sourcing on Production Workshop](#event-sourcing-on-production-workshop)
-  - [DISCLAIMER](#disclaimer)
+  - [⛔ DISCLAIMER](#-disclaimer)
   - [Overview](#overview)
     - [1. Concert Management](#1-concert-management)
     - [2. Shopping Cart](#2-shopping-cart)
@@ -63,7 +63,7 @@
       - [Invoice Details Read Model](#invoice-details-read-model)
     - [7. User Management Module](#7-user-management-module-1)
 
-## DISCLAIMER
+## ⛔ DISCLAIMER
 
 **THIS IS NOT AN EXAMPLE OF HOW YOU SHOULD IMPLEMENT EVENT SOURCING ON PRODUCTION.** 
 
