@@ -2,13 +2,13 @@
 
 - [Event Sourcing on Production Workshop](#event-sourcing-on-production-workshop)
   - [Overview](#overview)
-    - [1. Concert Management:](#1-concert-management)
-    - [2. Shopping Cart:](#2-shopping-cart)
-    - [3. Reservation:](#3-reservation)
-    - [4. Order Management:](#4-order-management)
-    - [5. Financial Management:](#5-financial-management)
-    - [6. Ticket Management and Delivery:](#6-ticket-management-and-delivery)
-    - [7. User Management Module:](#7-user-management-module)
+    - [1. Concert Management](#1-concert-management)
+    - [2. Shopping Cart](#2-shopping-cart)
+    - [3. Reservation](#3-reservation)
+    - [4. Order Management](#4-order-management)
+    - [5. Financial Management](#5-financial-management)
+    - [6. Ticket Management and Delivery](#6-ticket-management-and-delivery)
+    - [7. User Management Module](#7-user-management-module)
   - [Architecture](#architecture)
   - [C4 model](#c4-model)
     - [System](#system)
@@ -67,29 +67,29 @@
 
 Imagine you're organizing a Beyonce concert in Warsaw, and you need a system to manage every aspect of the event, from ticket reservations to financial transactions. Our system has you covered with the following modules:
 
-### [1. Concert Management](#concert-management-module):
+### [1. Concert Management](#concert-management-module)
     
 This module takes care of all the behind-the-scenes work that goes into planning the concert. As the organizer, you can create the concert event, set the location (Warsaw), date, and time, and even decide on the different types of tickets available (such as Regular and Golden Circle). You'll also have the power to update or cancel the concert and manage ticket pricing.
 
-### [2. Shopping Cart](#shopping-cart-module):
+### [2. Shopping Cart](#shopping-cart-module)
 In this module, users can collect tickets from multiple concerts in a single shopping cart. Once they're ready to checkout, they can confirm their selection and proceed with the payment. If any issues arise, like a failed payment, the system will handle the necessary compensation process.
 
-### [3. Reservation](#reservation-module):
+### [3. Reservation](#reservation-module)
 
 Once you have the concert details sorted, fans can start reserving their tickets through this module. They'll be able to choose from the different ticket types you've set up, and the system will make sure there aren't more reservations than available spots.
 
-### [4. Order Management](#order-management-module):
+### [4. Order Management](#order-management-module)
 This module coordinates the whole process of placing an order, including creating orders based on confirmed shopping carts, tracking the order status, and managing any changes or cancellations. It also ensures that the order details, such as ticket reservations and delivery methods, are properly handled.
 
-### [5. Financial Management](#financial-management-module):
+### [5. Financial Management](#financial-management-module)
 
 This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
 
-### [6. Ticket Management and Delivery](#ticket-management-module):
+### [6. Ticket Management and Delivery](#ticket-management-module)
 
 In this module, the system creates and manages tickets based on user reservations. It takes care of delivering the tickets to users via email or, if they prefer, arranging for printed tickets to be sent through courier services like FedEx.
 
-### [7. User Management Module](#user-management-module):
+### [7. User Management Module](#user-management-module)
 
 This module handles user registration, authentication, and role management. It enables users to create an account, log in, and perform actions based on their assigned roles, such as regular user, administrator, or concert organizer.
 
