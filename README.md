@@ -6,8 +6,8 @@
     - [2. Shopping Cart](#2-shopping-cart)
     - [3. Reservation](#3-reservation)
     - [4. Order Management](#4-order-management)
-    - [5. Financial Management](#5-financial-management)
-    - [6. Ticket Management and Delivery](#6-ticket-management-and-delivery)
+    - [5. Ticket Management and Delivery](#5-ticket-management-and-delivery)
+    - [6. Financial](#6-financial)
     - [7. User Management Module](#7-user-management-module)
   - [Architecture](#architecture)
   - [C4 model](#c4-model)
@@ -51,9 +51,7 @@
       - [Concert Ticket Summary Read Model](#concert-ticket-summary-read-model)
       - [Ticket Delivery Status Read Model](#ticket-delivery-status-read-model)
       - [Ticket Validation Status Read Model](#ticket-validation-status-read-model)
-    - [6. Payment (Bounded Context: Payments)](#6-payment-bounded-context-payments)
-    - [7. User Management Module](#7-user-management-module-1)
-    - [8. Finance (Bounded Context: Finance)](#8-finance-bounded-context-finance)
+    - [6. Financial Module](#6-financial-module)
     - [Flow](#flow-5)
       - [Payment](#payment)
       - [Invoice](#invoice)
@@ -62,6 +60,7 @@
       - [Payment Details Read Model](#payment-details-read-model)
       - [User Invoices Read Model](#user-invoices-read-model)
       - [Invoice Details Read Model](#invoice-details-read-model)
+    - [7. User Management Module](#7-user-management-module-1)
 
 ## Overview
 
@@ -81,13 +80,13 @@ Once you have the concert details sorted, fans can start reserving their tickets
 ### [4. Order Management](#order-management-module)
 This module coordinates the whole process of placing an order, including creating orders based on confirmed shopping carts, tracking the order status, and managing any changes or cancellations. It also ensures that the order details, such as ticket reservations and delivery methods, are properly handled.
 
-### [5. Financial Management](#financial-management-module)
-
-This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
-
-### [6. Ticket Management and Delivery](#ticket-management-module)
+### [5. Ticket Management and Delivery](#ticket-management-module)
 
 In this module, the system creates and manages tickets based on user reservations. It takes care of delivering the tickets to users via email or, if they prefer, arranging for printed tickets to be sent through courier services like FedEx.
+
+### [6. Financial](#financial-management-module)
+
+This module oversees invoicing, tracking user payments, and handling refunds. As the organizer, you'll have a clear view of the financial aspects of the event.
 
 ### [7. User Management Module](#user-management-module)
 
@@ -299,8 +298,8 @@ graph LR
 #### Summary
 
 - **Aggregates:** `Concert`
-- **Commands:** `CreateConcert`, `UpdateConcert`, `CancelConcert`, `UpdateTicketLevels`
-- **Events:** `ConcertCreated`, `ConcertUpdated`, `ConcertCancelled`, `TicketLevelsUpdated`
+- **Commands:** `CreateConcert`, `UpdateConcert`, `CancelConcert`, `UpdateTicketTypes`
+- **Events:** `ConcertCreated`, `ConcertUpdated`, `ConcertCancelled`, `TicketTypesUpdated`
 - **Read Models:** `ConcertDetails`, `AvailableConcerts`
 
 #### Flow
@@ -324,60 +323,124 @@ graph LR
 **3. Commands**
 
 ```csharp
-public record CreateConcert(string ConcertId, string Artist, Dictionary<string, int> TicketLevels, Dictionary<string, decimal> Pricing);
-public record UpdateTicketLevels(string ConcertId, Dictionary<string, int> TicketLevels, Dictionary<string, decimal> Pricing);
+public record CreateConcert(
+    string ConcertId,
+    string ConcertName,
+    string Artist,
+    DateTimeOffset ConcertDate,
+    string Location,
+    IReadOnlyList<TicketTypeInfo> TicketTypes
+);
+
+public record UpdateConcert(
+    string ConcertId,
+    string ConcertName,
+    string Artist,
+    DateTimeOffset ConcertDate,
+    string Location
+);
+
+public record UpdateTicketTypes(
+    string ConcertId,
+    IReadOnlyList<TicketTypeInfo> TicketTypes
+);
+
+public record CancelConcert(
+    string ConcertId
+);
+
+public record TicketTypeInfo(
+    string TicketType,
+    decimal Price,
+    int AvailableTickets
+);
 ```
 
 **3. Events**
 
 ```csharp
-public record ConcertCreated(string ConcertId, string Artist, Dictionary<string, int> TicketLevels, Dictionary<string, decimal> Pricing);
-public record TicketLevelsUpdated(string ConcertId, Dictionary<string, int> TicketLevels, Dictionary<string, decimal> Pricing);
+public record ConcertCreated(
+    string ConcertId,
+    string ConcertName,
+    string Artist,
+    DateTimeOffset ConcertDate,
+    string Location,
+    IReadOnlyList<TicketTypeInfo> TicketTypes
+);
+
+public record ConcertUpdated(
+    string ConcertId,
+    string ConcertName,
+    string Artist,
+    DateTimeOffset ConcertDate,
+    string Location
+);
+
+public record TicketTypesUpdated(
+    string ConcertId,
+    IReadOnlyList<TicketTypeInfo> TicketTypes
+);
+
+public record ConcertCancelled(
+    string ConcertId
+);
 ```
 
 **4. Aggregate**
 
 ```csharp
-public class Concert
+public class Concert: Aggregate
 {
-    public string ConcertId { get; private set; }
-    public string Artist { get; private set; }
-    public bool IsCancelled { get; private set; }
-    public Dictionary<string, int> TicketLevels { get; private set; }
-    public Dictionary<string, decimal> Pricing { get; private set; }
+    public string ConcertId { get; private set; } = default!;
+    public string ConcertName { get; private set; } = default!;
+    public string Artist { get; private set; } = default!;
+    public bool IsCancelled { get; private set; } = default!;
+    public Dictionary<string, int> TicketLevels { get; private set; } = default!;
+    public Dictionary<string, decimal> Pricing { get; private set; } = default!;
 
-    private void Apply(ConcertCreated e)
+    public static Concert New(CreateConcert command)
     {
-        ConcertId = e.ConcertId;
-        Artist = e.Artist;
-        TicketLevels = e.TicketLevels;
-        Pricing = e.Pricing;
+        var concert = new Concert();
+        concert.ApplyAndEnqueue(
+            new ConcertCreated(
+                command.ConcertId,
+                command.ConcertName,
+                command.Artist,
+                command.ConcertDate,
+                command.Location,
+                command.TicketTypes
+            )
+        );
+        return concert;
     }
 
-    private void Apply(TicketLevelsUpdated e)
-    {
-        TicketLevels = e.TicketLevels;
-        Pricing = e.Pricing;
-    }
 
-    private void Apply(ConcertCancelled e)
-    {
-        IsCancelled = true;
-    }
-
-    public void Create(CreateConcert command)
-    {
-        Apply(new ConcertCreated(command.ConcertId, command.Artist, command.TicketLevels, command.Pricing));
-    }
-
-    public void UpdateTicketLevels(UpdateTicketLevels command)
+    public void Update(UpdateConcert command)
     {
         if (IsCancelled)
         {
             throw new InvalidOperationException("Cannot update ticket levels for a cancelled concert.");
         }
 
-        Apply(new TicketLevelsUpdated(command.ConcertId, command.TicketLevels, command.Pricing));
+        ApplyAndEnqueue(
+            new ConcertUpdated(
+                command.ConcertId,
+                command.ConcertName,
+                command.Artist,
+                command.ConcertDate,
+                command.Location
+            )
+        );
+    }
+
+    public void UpdateTicketLevels(UpdateTicketTypes command)
+    {
+        if (IsCancelled)
+        {
+            throw new InvalidOperationException("Cannot update ticket levels for a cancelled concert.");
+        }
+
+        ApplyAndEnqueue(new TicketTypesUpdated(command.ConcertId, command.TicketTypes));
     }
 
     public void Cancel(CancelConcert command)
@@ -387,10 +450,28 @@ public class Concert
             throw new InvalidOperationException("Cannot cancel an already cancelled concert.");
         }
 
-        Apply(new ConcertCancelled(command.ConcertId));
+        ApplyAndEnqueue(new ConcertCancelled(command.ConcertId));
+    }
+
+    private void Apply(ConcertCreated e)
+    {
+        ConcertId = e.ConcertId;
+        Artist = e.Artist;
+        TicketLevels = e.TicketTypes.ToDictionary(t => t.TicketType, t => t.AvailableTickets);
+        Pricing = e.TicketTypes.ToDictionary(t => t.TicketType, t => t.Price);
+    }
+
+    private void Apply(TicketTypesUpdated e)
+    {
+        TicketLevels = e.TicketTypes.ToDictionary(t => t.TicketType, t => t.AvailableTickets);
+        Pricing = e.TicketTypes.ToDictionary(t => t.TicketType, t => t.Price);
+    }
+
+    private void Apply(ConcertCancelled e)
+    {
+        IsCancelled = true;
     }
 }
-
 ```
 
 **5. Command Handler**
@@ -398,38 +479,37 @@ public class Concert
 ```csharp
 public class ConcertCommandHandler
 {
-    private readonly IDocumentSession _session;
+    private readonly IEventStore eventStore;
 
-    public ConcertCommandHandler(IDocumentSession session)
+    public ConcertCommandHandler(IEventStore eventStore)
     {
-        _session = session;
+        this.eventStore = eventStore;
     }
 
     public async Task HandleAsync(CreateConcert command)
     {
-        var concert = new Concert();
-        concert.Create(command);
+        var concert = Concert.New(command);
 
-        _session.Events.Append(command.ConcertId, concert);
-        await _session.SaveChangesAsync();
+        eventStore.Append(command.ConcertId, concert);
+        await eventStore.SaveChangesAsync();
     }
 
-    public async Task HandleAsync(UpdateTicketLevels command)
+    public async Task HandleAsync(UpdateTicketTypes command)
     {
-        var concert = await _session.Events.AggregateStreamAsync<Concert>(command.ConcertId);
+        var concert = await eventStore.AggregateStreamAsync<Concert>(command.ConcertId);
         concert.UpdateTicketLevels(command);
 
-        _session.Events.Append(command.ConcertId, concert);
-        await _session.SaveChangesAsync();
+        eventStore.Append(command.ConcertId, concert);
+        await eventStore.SaveChangesAsync();
     }
 
     public async Task HandleAsync(CancelConcert command)
     {
-        var concert = await _session.Events.AggregateStreamAsync<Concert>(command.ConcertId);
+        var concert = await eventStore.AggregateStreamAsync<Concert>(command.ConcertId);
         concert.Cancel(command);
 
-        _session.Events.Append(command.ConcertId, concert);
-        await _session.SaveChangesAsync();
+        eventStore.Append(command.ConcertId, concert);
+        await eventStore.SaveChangesAsync();
     }
 }
 ```
@@ -441,61 +521,68 @@ Display concert details for users to view and reserve tickets
 **View**
 
 ```csharp
-public record ConcertDetails(Guid ConcertId, string ConcertName, DateTime ConcertDate, string Location, IReadOnlyList<TicketTypeInfo> TicketTypes);
-
-public record TicketTypeInfo(string TicketType, decimal Price, int AvailableTickets);
+public record ConcertDetails(
+    string ConcertId,
+    string ConcertName,
+    string Artist,
+    DateTimeOffset ConcertDate,
+    string Location,
+    IReadOnlyList<TicketTypeInfo> TicketTypes
+);
 ```
 
 **Read Model**
 
 ```csharp
-public class ConcertDetailsProjection : SingleStreamProjection<ConcertDetails>
+public class ConcertDetailsProjection: Projection<ConcertDetails>
 {
-    public ConcertDetailsProjection() : base(ConcertDetails.StreamIdentity)
+    public ConcertDetailsProjection()
     {
+        Projects<ConcertCreated>(ev => ev.ConcertId, Apply);
+        Projects<ConcertUpdated>(ev => ev.ConcertId, Apply);
+        Projects<TicketTypesUpdated>(ev => ev.ConcertId, Apply);
+        Projects<TicketReserved>(ev => ev.ConcertId, Apply);
+        Projects<TicketReservationCancelled>(ev => ev.ConcertId, Apply);
     }
 
-    public void Apply(ConcertDetails view, ConcertCreated @event)
-    {
-        view = new ConcertDetails(@event.ConcertId, @event.ConcertName, @event.ConcertDate, @event.Location, @event.TicketTypes);
-    }
+    private ConcertDetails Apply(ConcertDetails view, ConcertCreated @event) =>
+        new ConcertDetails(
+            @event.ConcertId,
+            @event.ConcertName,
+            @event.Artist,
+            @event.ConcertDate,
+            @event.Location,
+            @event.TicketTypes
+        );
 
-    public void Apply(ConcertDetails view, ConcertUpdated @event)
-    {
-        view = view with
+    private ConcertDetails Apply(ConcertDetails view, ConcertUpdated @event) =>
+        view with
         {
             ConcertName = @event.ConcertName,
             ConcertDate = @event.ConcertDate,
-            Location = @event.Location,
-            TicketTypes = @event.TicketTypes
+            Artist = @event.Artist,
+            Location = @event.Location
         };
-    }
 
-    public void Apply(ConcertDetails view, TicketTypeUpdated @event)
-    {
-        var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
-            ? tt with { Price = @event.Price, AvailableTickets = @event.AvailableTickets }
-            : tt).ToList();
+    private ConcertDetails Apply(ConcertDetails view, TicketTypesUpdated @event) =>
+        view with { TicketTypes = @event.TicketTypes };
 
-        view = view with { TicketTypes = updatedTicketTypes };
-    }
-
-    public void Apply(ConcertDetails view, TicketReserved @event)
+    public ConcertDetails Apply(ConcertDetails view, TicketReserved @event)
     {
         var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
             ? tt with { AvailableTickets = tt.AvailableTickets - 1 }
             : tt).ToList();
 
-        view = view with { TicketTypes = updatedTicketTypes };
+        return view with { TicketTypes = updatedTicketTypes };
     }
 
-    public void Apply(ConcertDetails view, TicketReservationCancelled @event)
+    public ConcertDetails Apply(ConcertDetails view, TicketReservationCancelled @event)
     {
         var updatedTicketTypes = view.TicketTypes.Select(tt => tt.TicketType == @event.TicketType
             ? tt with { AvailableTickets = tt.AvailableTickets + 1 }
             : tt).ToList();
 
-        view = view with { TicketTypes = updatedTicketTypes };
+        return view with { TicketTypes = updatedTicketTypes };
     }
 }
 ```
@@ -507,39 +594,50 @@ Display a list of available concerts for users to browse
 **View**
 
 ```csharp
-public record AvailableConcert(Guid ConcertId, string ConcertName, DateTime ConcertDate, string Location);
+public record AvailableConcert(
+    string ConcertId,
+    string ConcertName,
+    DateTimeOffset ConcertDate,
+    string Location
+);
 
-public record AvailableConcerts(IReadOnlyList<AvailableConcert> Concerts);
+public record AvailableConcerts(
+    IReadOnlyList<AvailableConcert> Concerts
+);
 ```
 
 **Read Model**
 
 ```csharp
-public class AvailableConcertsProjection : MultiStreamProjection<AvailableConcerts>
+
+public class AvailableConcertsProjection : Projection<AvailableConcerts>
 {
-    public AvailableConcertsProjection() : base(AvailableConcerts.StreamIdentity)
+    public AvailableConcertsProjection()
     {
+        Projects<ConcertCreated>(ev => ev.ConcertId, Apply);
+        Projects<ConcertUpdated>(ev => ev.ConcertId, Apply);
+        Projects<ConcertCancelled>(ev => ev.ConcertId, Apply);
     }
 
-    public void Apply(AvailableConcerts view, ConcertCreated @event)
+    private AvailableConcerts Apply(AvailableConcerts view, ConcertCreated @event)
     {
         var newConcert = new AvailableConcert(@event.ConcertId, @event.ConcertName, @event.ConcertDate, @event.Location);
-        view = view with { Concerts = view.Concerts.Append(newConcert).ToList() };
+        return view with { Concerts = view.Concerts.Append(newConcert).ToList() };
     }
 
-    public void Apply(AvailableConcerts view, ConcertUpdated @event)
+    private AvailableConcerts Apply(AvailableConcerts view, ConcertUpdated @event)
     {
         var updatedConcerts = view.Concerts.Select(c => c.ConcertId == @event.ConcertId
             ? c with { ConcertName = @event.ConcertName, ConcertDate = @event.ConcertDate, Location = @event.Location }
             : c).ToList();
 
-        view = view with { Concerts = updatedConcerts };
+        return view with { Concerts = updatedConcerts };
     }
 
-    public void Apply(AvailableConcerts view, ConcertCancelled @event)
+    private AvailableConcerts Apply(AvailableConcerts view, ConcertCancelled @event)
     {
         var updatedConcerts = view.Concerts.Where(c => c.ConcertId != @event.ConcertId).ToList();
-        view = view with { Concerts = updatedConcerts };
+        return view with { Concerts = updatedConcerts };
     }
 }
 ```
@@ -792,17 +890,17 @@ Display the contents of a user's shopping cart
 **View**
 
 ```csharp
-public record ShoppingCartItem(Guid ConcertId, string ConcertName, string TicketType, int Quantity, decimal Price);
+public record ShoppingCartItem(string ConcertId, string ConcertName, string TicketType, int Quantity, decimal Price);
 
-public record ShoppingCartContents(Guid UserId, IReadOnlyList<ShoppingCartItem> Items);
+public record ShoppingCartContents(string UserId, IReadOnlyList<ShoppingCartItem> Items);
 ```
 
 **Read Model**
 
 ```csharp
-public class ShoppingCartContentsProjection : SingleStreamProjection<ShoppingCartContents>
+public class ShoppingCartContentsProjection : Projection<ShoppingCartContents>
 {
-    public ShoppingCartContentsProjection() : base(ShoppingCartContents.StreamIdentity)
+    public ShoppingCartContentsProjection()
     {
     }
 
@@ -842,15 +940,15 @@ Display a summary of a user's shopping cart
 **View**
 
 ```csharp
-public record ShoppingCartSummary(Guid UserId, int TotalItems, decimal TotalPrice);
+public record ShoppingCartSummary(string UserId, int TotalItems, decimal TotalPrice);
 ```
 
 **Read Model**
 
 ```csharp
-public class ShoppingCartSummaryProjection : SingleStreamProjection<ShoppingCartSummary>
+public class ShoppingCartSummaryProjection : Projection<ShoppingCartSummary>
 {
-    public ShoppingCartSummaryProjection() : base(ShoppingCartSummary.StreamIdentity)
+    public ShoppingCartSummaryProjection()
     {
     }
 
@@ -1178,17 +1276,17 @@ Display a list of reservations made by a user
 **View**
 
 ```csharp
-public record UserReservations(Guid UserId, IReadOnlyList<Reservation> Reservations);
+public record UserReservations(string UserId, IReadOnlyList<Reservation> Reservations);
 
-public record Reservation(Guid ConcertId, string ConcertName, DateTime ConcertDate, string TicketType, int ReservedTickets);
+public record Reservation(string ConcertId, string ConcertName, DateTimeOffset ConcertDate, string TicketType, int ReservedTickets);
 ```
 
 **Read Model**
 
 ```csharp
-public class UserReservationsProjection : SingleStreamProjection<UserReservations>
+public class UserReservationsProjection : Projection<UserReservations>
 {
-    public UserReservationsProjection() : base(UserReservations.StreamIdentity)
+    public UserReservationsProjection()
     {
     }
 
@@ -1212,17 +1310,17 @@ Display a summary of reservations for a specific concert
 **View**
 
 ```csharp
-public record ConcertReservations(Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<ReservationSummary> Reservations);
+public record ConcertReservations(string ConcertId, string ConcertName, DateTimeOffset ConcertDate, IReadOnlyList<ReservationSummary> Reservations);
 
-public record ReservationSummary(Guid UserId, string UserName, string TicketType, int ReservedTickets);
+public record ReservationSummary(string UserId, string UserName, string TicketType, int ReservedTickets);
 ```
 
 **Read Model**
 
 ```csharp
-public class ConcertReservationsProjection : SingleStreamProjection<ConcertReservations>
+public class ConcertReservationsProjection : Projection<ConcertReservations>
 {
-    public ConcertReservationsProjection() : base(ConcertReservations.StreamIdentity)
+    public ConcertReservationsProjection()
     {
     }
 
@@ -1529,9 +1627,9 @@ Display a list of orders made by a user
 **View**
 
 ```csharp
-public record UserOrders(Guid UserId, IReadOnlyList<OrderSummary> Orders);
+public record UserOrders(string UserId, IReadOnlyList<OrderSummary> Orders);
 
-public record OrderSummary(Guid OrderId, Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status);
+public record OrderSummary(string OrderId, string ConcertId, string ConcertName, DateTimeOffset ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status);
 
 public record OrderItem(string TicketType, int Quantity, decimal Price);
 
@@ -1546,9 +1644,9 @@ public enum OrderStatus
 **Read Model**
 
 ```csharp
-public class UserOrdersProjection : SingleStreamProjection<UserOrders>
+public class UserOrdersProjection : Projection<UserOrders>
 {
-    public UserOrdersProjection() : base(UserOrders.StreamIdentity)
+    public UserOrdersProjection()
     {
     }
 
@@ -1584,7 +1682,7 @@ Use case: Display the details of a specific order for a user
 **View**
 
 ```csharp
-public record OrderDetails(Guid OrderId, Guid UserId, Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status, decimal TotalAmount);
+public record OrderDetails(string OrderId, string UserId, string ConcertId, string ConcertName, DateTimeOffset ConcertDate, IReadOnlyList<OrderItem> OrderItems, OrderStatus Status, decimal TotalAmount);
 
 public record OrderItem(string TicketType, int Quantity, decimal Price);
 
@@ -1599,9 +1697,9 @@ public enum OrderStatus
 **Read Model**
 
 ```csharp
-public class OrderDetailsProjection : SingleStreamProjection<OrderDetails>
+public class OrderDetailsProjection : Projection<OrderDetails>
 {
-    public OrderDetailsProjection() : base(OrderDetails.StreamIdentity)
+    public OrderDetailsProjection()
     {
     }
 
@@ -2089,17 +2187,17 @@ Display a list of tickets owned by a user.
 **View**
 
 ```csharp
-public record UserTickets(Guid UserId, IReadOnlyList<TicketSummary> Tickets);
+public record UserTickets(string UserId, IReadOnlyList<TicketSummary> Tickets);
 
-public record TicketSummary(Guid TicketId, Guid ConcertId, string ConcertName, DateTime ConcertDate, string TicketType, decimal TicketPrice);
+public record TicketSummary(string TicketId, string ConcertId, string ConcertName, DateTimeOffset ConcertDate, string TicketType, decimal TicketPrice);
 ```
 
 **Projection**
 
 ```csharp
-public class UserTicketsProjection : SingleStreamProjection<UserTickets>
+public class UserTicketsProjection : Projection<UserTickets>
 {
-    public UserTicketsProjection() : base(UserTickets.StreamIdentity)
+    public UserTicketsProjection()
     {
     }
 
@@ -2154,15 +2252,15 @@ Display the details of a specific ticket for a user.
 **View**
 
 ```csharp
-public record TicketDetails(Guid TicketId, Guid UserId, Guid ConcertId, string ConcertName, DateTime ConcertDate, string VenueName, string TicketType, decimal TicketPrice, string Barcode, DateTimeOffset CreatedAt);
+public record TicketDetails(string TicketId, string UserId, string ConcertId, string ConcertName, DateTimeOffset ConcertDate, string VenueName, string TicketType, decimal TicketPrice, string Barcode, DateTimeOffset CreatedAt);
 ```
 
 **Projection**
 
 ```csharp
-public class TicketDetailsProjection : SingleStreamProjection<TicketDetails>
+public class TicketDetailsProjection : Projection<TicketDetails>
 {
-    public TicketDetailsProjection() : base(TicketDetails.StreamIdentity)
+    public TicketDetailsProjection()
     {
     }
 
@@ -2192,7 +2290,7 @@ Display a summary of tickets for a specific concert.
 **View**
 
 ```csharp
-public record ConcertTicketSummary(Guid ConcertId, string ConcertName, DateTime ConcertDate, IReadOnlyList<TicketTypeSummary> TicketTypes);
+public record ConcertTicketSummary(string ConcertId, string ConcertName, DateTimeOffset ConcertDate, IReadOnlyList<TicketTypeSummary> TicketTypes);
 
 public record TicketTypeSummary(string TicketType, int TotalTickets, int AvailableTickets, int ReservedTickets, int SoldTickets);
 ```
@@ -2200,9 +2298,9 @@ public record TicketTypeSummary(string TicketType, int TotalTickets, int Availab
 **Projection**
 
 ```csharp
-public class ConcertTicketSummaryProjection : SingleStreamProjection<ConcertTicketSummary>
+public class ConcertTicketSummaryProjection : Projection<ConcertTicketSummary>
 {
-    public ConcertTicketSummaryProjection() : base(ConcertTicketSummary.StreamIdentity)
+    public ConcertTicketSummaryProjection()
     {
     }
 
@@ -2258,15 +2356,15 @@ Display the delivery status of a specific ticket for a user.
 **View**
 
 ```csharp
-public record TicketDeliveryStatus(Guid TicketId, Guid UserId, DeliveryMethod DeliveryMethod, string DeliveryStatus, string TrackingNumber, DateTimeOffset? DeliveryDate);
+public record TicketDeliveryStatus(string TicketId, string UserId, DeliveryMethod DeliveryMethod, string DeliveryStatus, string TrackingNumber, DateTimeOffset? DeliveryDate);
 ```
 
 **Projection**
 
 ```csharp
-public class TicketDeliveryStatusProjection : SingleStreamProjection<TicketDeliveryStatus>
+public class TicketDeliveryStatusProjection : Projection<TicketDeliveryStatus>
 {
-    public TicketDeliveryStatusProjection() : base(TicketDeliveryStatus.StreamIdentity)
+    public TicketDeliveryStatusProjection()
     {
     }
 
@@ -2308,15 +2406,15 @@ Display the validation status of a specific ticket at the concert venue.
 **View**
 
 ```csharp
-public record TicketValidationStatus(Guid TicketId, Guid ConcertId, bool IsValid, string ValidationMessage);
+public record TicketValidationStatus(string TicketId, string ConcertId, bool IsValid, string ValidationMessage);
 ```
 
 **Projection**
 
 ```csharp
-public class TicketValidationStatusProjection : SingleStreamProjection<TicketValidationStatus>
+public class TicketValidationStatusProjection : Projection<TicketValidationStatus>
 {
-    public TicketValidationStatusProjection() : base(TicketValidationStatus.StreamIdentity)
+    public TicketValidationStatusProjection()
     {
     }
 
@@ -2343,26 +2441,12 @@ public class TicketValidationStatusProjection : SingleStreamProjection<TicketVal
 
 ```
 
-### 6. Payment (Bounded Context: Payments)
+### 6. Financial Module
 
-- **Aggregates:** `Payment`
-- **Commands:** : `InitiatePayment`, `ConfirmPayment`, `RefundPayment`
-- **Events:** `PaymentInitiated`, `PaymentConfirmed`, `PaymentRefunded`
-- **Read Models:** `UserPayments`, `PaymentDetails`, `UserInvoices`, `InvoiceDetails`
-
-<a href='#user-management-module' id='user-management-module' class='anchor' aria-hidden='true'></a>
-
-### 7. User Management Module
-
-- **Aggregates:** `User`
-- **Commands:** : `RegisterUser`, `UpdateUserRole`
-- **Events:** `UserRegistered`, `UserRoleUpdated`
-
-### 8. Finance (Bounded Context: Finance)
-
-- **Aggregates:** `Invoice`, `UserFinancialInfo`
-- **Commands:** `CreateInvoice`, `UpdateInvoice`, `CreateUserFinancialInfo`, `UpdateUserFinancialInfo`
+- **Aggregates:** `Payment`, `Invoice`, `UserFinancialInfo`
+- **Commands:** `CreateInvoice`, `UpdateInvoice`, `CreateUserFinancialInfo`, `UpdateUserFinancialInfo`, `InitiatePayment`, `ConfirmPayment`, `RefundPayment`
 - **Events:** `InvoiceCreated`, `InvoiceUpdated`, `UserFinancialInfoCreated`, `UserFinancialInfoUpdated`
+- **Read Models:** `UserPayments`, `PaymentDetails`, `UserInvoices`, `InvoiceDetails`
 
 ### Flow
 
@@ -2409,15 +2493,15 @@ public record PaymentFailed(string PaymentId);
 ```csharp
 public class Payment : AggregateBase
 {
-    private Guid _orderId;
-    private Guid _userId;
+    private string _orderId;
+    private string _userId;
     private decimal _amount;
     private PaymentStatus _status;
     // Add any additional fields if necessary
 
     public Payment() { }
 
-    public Payment(Guid paymentId, Guid orderId, Guid userId, decimal amount)
+    public Payment(string paymentId, string orderId, string userId, decimal amount)
     {
         if (amount <= 0)
         {
@@ -2675,17 +2759,17 @@ Display a list of payments made by a user
 **View**
 
 ```csharp
-public record UserPayment(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
+public record UserPayment(string PaymentId, string UserId, string OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
 
-public record UserPayments(Guid UserId, IReadOnlyList<UserPayment> Payments);
+public record UserPayments(string UserId, IReadOnlyList<UserPayment> Payments);
 ```
 
 **Projection**
 
 ```csharp
-public class UserPaymentsProjection : SingleStreamProjection<UserPayments>
+public class UserPaymentsProjection : Projection<UserPayments>
 {
-    public UserPaymentsProjection() : base(UserPayments.StreamIdentity)
+    public UserPaymentsProjection()
     {
     }
 
@@ -2725,7 +2809,7 @@ Display the details of a specific payment for a user
 **View**
 
 ```csharp
-public record PaymentDetails(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate, string StripePaymentId);
+public record PaymentDetails(string PaymentId, string UserId, string OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate, string StripePaymentId);
 ```
 
 **Projection**
@@ -2740,17 +2824,17 @@ Display a list of invoices for a user
 **View**
 
 ```csharp
-public record UserPayment(Guid PaymentId, Guid UserId, Guid OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
+public record UserPayment(string PaymentId, string UserId, string OrderId, decimal Amount, PaymentStatus Status, DateTimeOffset PaymentDate);
 
-public record UserPayments(Guid UserId, IReadOnlyList<UserPayment> Payments);
+public record UserPayments(string UserId, IReadOnlyList<UserPayment> Payments);
 ```
 
 **Projection**
 
 ```csharp
-public class PaymentDetailsProjection : SingleStreamProjection<PaymentDetails>
+public class PaymentDetailsProjection : Projection<PaymentDetails>
 {
-    public PaymentDetailsProjection() : base(PaymentDetails.StreamIdentity)
+    public PaymentDetailsProjection()
     {
     }
 
@@ -2784,7 +2868,7 @@ Display the details of a specific invoice for a user
 **View**
 
 ```csharp
-public record InvoiceDetails(Guid InvoiceId, Guid UserId, Guid OrderId, decimal Amount, DateTimeOffset InvoiceDate, IReadOnlyList<InvoiceItem> Items);
+public record InvoiceDetails(string InvoiceId, string UserId, string OrderId, decimal Amount, DateTimeOffset InvoiceDate, IReadOnlyList<InvoiceItem> Items);
 
 public record InvoiceItem(string Description, int Quantity, decimal Price);
 ```
@@ -2792,15 +2876,22 @@ public record InvoiceItem(string Description, int Quantity, decimal Price);
 **Projection**
 
 ```csharp
-public class InvoiceDetailsProjection : SingleStreamProjection<InvoiceDetails>
+public class InvoiceDetailsProjection : Projection<InvoiceDetails>
 {
-    public InvoiceDetailsProjection() : base(InvoiceDetails.StreamIdentity)
+    public InvoiceDetailsProjection()
     {
+        Projects<InvoiceCreated>(ev => ev.InvoiceId, Apply);
     }
 
-    public void Apply(InvoiceDetails view, InvoiceCreated @event)
-    {
-        view = new InvoiceDetails(@event.InvoiceId, @event.UserId, @event.OrderId, @event.Amount, @event.CreatedAt, @event.Items);
-    }
+    public void Apply(InvoiceDetails view, InvoiceCreated @event) =>
+        new InvoiceDetails(@event.InvoiceId, @event.UserId, @event.OrderId, @event.Amount, @event.CreatedAt, @event.Items);
 }
 ```
+
+<a href='#user-management-module' id='user-management-module' class='anchor' aria-hidden='true'></a>
+
+### 7. User Management Module
+
+- **Aggregates:** `User`
+- **Commands:** : `RegisterUser`, `UpdateUserRole`
+- **Events:** `UserRegistered`, `UserRoleUpdated`
